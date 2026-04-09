@@ -2,22 +2,44 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"iclaw/pkg/provider"
 )
 
+// fakeResponse is one entry in a fakeProvider's scripted responses. Each
+// call to Chat consumes one response: a non-nil err means that call fails,
+// otherwise reply is returned.
+type fakeResponse struct {
+	reply string
+	err   error
+}
+
 // fakeProvider is an in-memory Provider implementation used by the tests in
-// this file. It performs no network I/O: every Chat call simply records the
-// messages it received into gotMsgs and returns the canned reply string.
+// this file. It performs no network I/O. Instead it returns answers from a
+// pre-queued script of responses and records the messages it received on
+// the most recent call.
+//
+// The script lets a single test cover multi-turn conversations: each Chat
+// call pops the next response in order. Calling Chat more times than the
+// script has entries panics — that's a test bug we want to surface loudly,
+// not silently mask by returning a zero value.
 type fakeProvider struct {
-	gotMsgs []provider.Message
-	reply   string
+	gotMsgs   []provider.Message // msgs from the MOST RECENT Chat call
+	responses []fakeResponse     // scripted responses, consumed in order
+	calls     int                // number of Chat calls so far
 }
 
 func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message) (string, error) {
 	f.gotMsgs = msgs
-	return f.reply, nil
+	if f.calls >= len(f.responses) {
+		panic(fmt.Sprintf("fakeProvider: Chat called %d times, only %d responses queued", f.calls+1, len(f.responses)))
+	}
+	r := f.responses[f.calls]
+	f.calls++
+	return r.reply, r.err
 }
 
 // TestAgentReply covers the happy path of Agent.Reply when a non-empty
@@ -42,7 +64,7 @@ func TestAgentReply(t *testing.T) {
 		user   = "hello"
 		reply  = "hi there"
 	)
-	fp := &fakeProvider{reply: reply}
+	fp := &fakeProvider{responses: []fakeResponse{{reply: reply}}}
 	a := New(fp, system)
 
 	// (1) The Provider's reply should propagate through Agent unchanged.
@@ -80,7 +102,7 @@ func TestAgentReply(t *testing.T) {
 // refactor removes the `if`, this test will fail because gotMsgs would
 // contain two messages instead of one.
 func TestAgentReply_EmptySystem(t *testing.T) {
-	fp := &fakeProvider{reply: "ok"}
+	fp := &fakeProvider{responses: []fakeResponse{{reply: "ok"}}}
 	a := New(fp, "")
 
 	if _, err := a.Reply(context.Background(), "hello"); err != nil {
@@ -93,5 +115,115 @@ func TestAgentReply_EmptySystem(t *testing.T) {
 	}
 	if fp.gotMsgs[0].Role != "user" || fp.gotMsgs[0].Content != "hello" {
 		t.Errorf("msgs[0]: got %+v, want user/hello", fp.gotMsgs[0])
+	}
+}
+
+// TestAgentReply_RemembersHistory verifies the core promise of Step 2:
+// Agent accumulates conversation history across Reply calls and replays it
+// on every subsequent call, so the model "remembers" earlier turns.
+//
+// The fake provider doesn't actually remember anything — what we're
+// pinning down is that on the SECOND call, msgs contains the entire prior
+// conversation (system + every previous user/assistant pair) followed by
+// the new user message. A real LLM with that input would be able to
+// answer "what is my name?" correctly.
+//
+// If a future refactor breaks the history (e.g. someone wires up a new
+// per-call slice instead of appending to a.history, or forgets to record
+// the assistant reply), this test will fail because the second call's
+// msgs will be too short or missing the prior turns.
+func TestAgentReply_RemembersHistory(t *testing.T) {
+	const system = "you are a helpful assistant"
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: "nice to meet you, xiaoming"}, // turn 1 reply
+			{reply: "your name is xiaoming"},      // turn 2 reply
+		},
+	}
+	a := New(fp, system)
+	ctx := context.Background()
+
+	// Turn 1: introduce a name. We don't assert on this call's msgs;
+	// TestAgentReply already covers the single-call shape.
+	if _, err := a.Reply(ctx, "my name is xiaoming"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Turn 2: ask about the name.
+	got, err := a.Reply(ctx, "what is my name?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "your name is xiaoming" {
+		t.Errorf("reply: got %q, want %q", got, "your name is xiaoming")
+	}
+
+	// On the second Chat call, msgs must contain:
+	//   [system, user(turn1), assistant(turn1), user(turn2)]
+	// i.e. system prompt + the entire accumulated history with the new
+	// user message at the end.
+	want := []provider.Message{
+		{Role: "system", Content: system},
+		{Role: "user", Content: "my name is xiaoming"},
+		{Role: "assistant", Content: "nice to meet you, xiaoming"},
+		{Role: "user", Content: "what is my name?"},
+	}
+	if len(fp.gotMsgs) != len(want) {
+		t.Fatalf("msgs len on second call: got %d, want %d", len(fp.gotMsgs), len(want))
+	}
+	for i := range want {
+		if fp.gotMsgs[i] != want[i] {
+			t.Errorf("msgs[%d]: got %+v, want %+v", i, fp.gotMsgs[i], want[i])
+		}
+	}
+}
+
+// TestAgentReply_RollsBackOnError pins down the failure-recovery contract:
+// when the Provider returns an error, Agent must NOT leave the new user
+// message stranded in history. Otherwise, on the next successful call,
+// msgs would contain two consecutive user messages with no assistant in
+// between — an illegal conversation shape that confuses many models.
+//
+// The harder scenario this test covers is the one where history is
+// non-empty BEFORE the failing call: if rollback uses the wrong index or
+// removes the wrong element, it could silently corrupt earlier turns
+// instead of just removing the new user. So we run a successful turn 1
+// first, then make turn 2 fail, then assert that history is exactly what
+// it was after turn 1 — same length, same contents.
+func TestAgentReply_RollsBackOnError(t *testing.T) {
+	const system = "you are a helpful assistant"
+	boom := errors.New("provider boom")
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: "ok"}, // turn 1: success
+			{err: boom},   // turn 2: failure
+		},
+	}
+	a := New(fp, system)
+	ctx := context.Background()
+
+	// Turn 1: succeed so history has a real (user, assistant) pair.
+	if _, err := a.Reply(ctx, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.history) != 2 {
+		t.Fatalf("after turn 1: history len = %d, want 2", len(a.history))
+	}
+
+	// Turn 2: provider fails. Reply must propagate the error AND roll
+	// back the user message it speculatively appended at the start of
+	// the call, leaving history exactly as it was after turn 1.
+	_, err := a.Reply(ctx, "second")
+	if !errors.Is(err, boom) {
+		t.Fatalf("err: got %v, want %v", err, boom)
+	}
+	if len(a.history) != 2 {
+		t.Fatalf("after turn 2 failure: history len = %d, want 2 (user message should have been rolled back)", len(a.history))
+	}
+	// Most importantly: turn 1's content must still be intact. A buggy
+	// rollback could remove the wrong element and silently corrupt the
+	// prior turn — this assertion catches that.
+	if a.history[0].Content != "first" || a.history[1].Content != "ok" {
+		t.Errorf("history corrupted after rollback: %+v", a.history)
 	}
 }
