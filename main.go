@@ -33,6 +33,18 @@ func main() {
 			fmt.Println()
 			return
 		}
+		if input == "/clear" {
+			a.ClearHistory()
+			fmt.Println("History cleared")
+			continue
+		}
+		if input == "/history" {
+			fmt.Println("History:")
+			for i, msg := range a.History() {
+				fmt.Printf("%d. [%s] %s\n", i+1, msg.Role, msg.Content)
+			}
+			continue
+		}
 		if input == "" {
 			continue
 		}

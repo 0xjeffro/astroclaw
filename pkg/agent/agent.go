@@ -15,6 +15,14 @@ func New(p provider.Provider, system string) *Agent {
 	return &Agent{provider: p, system: system}
 }
 
+func (a *Agent) ClearHistory() {
+	a.history = []provider.Message{}
+}
+
+func (a *Agent) History() []provider.Message {
+	return a.history
+}
+
 func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 
 	// Add the user message to the history.
