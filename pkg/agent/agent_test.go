@@ -10,21 +10,21 @@ import (
 )
 
 // fakeResponse is one entry in a fakeProvider's scripted responses. Each
-// call to Chat consumes one response: a non-nil err means that call fails,
-// otherwise reply is returned.
+// call to Chat consumes one response: a non-nil err means that the call fails,
+// otherwise the reply is returned.
 type fakeResponse struct {
-	reply string
+	reply provider.Message
 	err   error
 }
 
 // fakeProvider is an in-memory Provider implementation used by the tests in
-// this file. It performs no network I/O. Instead it returns answers from a
+// this file. It performs no network I/O. Instead, it returns answers from a
 // pre-queued script of responses and records the messages it received on
 // the most recent call.
 //
 // The script lets a single test cover multi-turn conversations: each Chat
 // call pops the next response in order. Calling Chat more times than the
-// script has entries panics — that's a test bug we want to surface loudly,
+// script has entry panics — that's a test bug we want to surface loudly,
 // not silently mask by returning a zero value.
 type fakeProvider struct {
 	gotMsgs   []provider.Message // msgs from the MOST RECENT Chat call
@@ -32,14 +32,14 @@ type fakeProvider struct {
 	calls     int                // number of Chat calls so far
 }
 
-func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message) (string, error) {
+func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message, _ []provider.Tool) (provider.Message, error) {
 	f.gotMsgs = msgs
 	if f.calls >= len(f.responses) {
 		panic(fmt.Sprintf("fakeProvider: Chat called %d times, only %d responses queued", f.calls+1, len(f.responses)))
 	}
-	r := f.responses[f.calls]
+	fr := f.responses[f.calls]
 	f.calls++
-	return r.reply, r.err
+	return fr.reply, fr.err
 }
 
 // TestAgentReply covers the happy path of Agent.Reply when a non-empty
@@ -51,12 +51,12 @@ func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message) (string,
 //     must not truncate, rewrap, or otherwise mutate the reply.
 //
 //  2. Reply must hand the Provider exactly two messages: one system and
-//     one user. Any other count means Agent either dropped the system
+//     one user. Any other count means the Agent either dropped the system
 //     prompt or injected something it shouldn't have.
 //
 //  3. The two messages must have the correct role, content, AND order.
 //     The system message must come first; the OpenAI Chat Completions
-//     protocol expects system instructions at the head of the messages
+//     protocol expects system instructions at the head of the message
 //     array, and putting them anywhere else can confuse the model.
 func TestAgentReply(t *testing.T) {
 	const (
@@ -64,7 +64,11 @@ func TestAgentReply(t *testing.T) {
 		user   = "hello"
 		reply  = "hi there"
 	)
-	fp := &fakeProvider{responses: []fakeResponse{{reply: reply}}}
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{Role: "assistant", Content: reply}},
+		},
+	}
 	a := New(fp, system)
 
 	// (1) The Provider's reply should propagate through Agent unchanged.
@@ -76,7 +80,7 @@ func TestAgentReply(t *testing.T) {
 		t.Errorf("reply: got %q, want %q", got, reply)
 	}
 
-	// (2) Exactly two messages should have been sent down to the Provider.
+	// (2) Exactly two messages should have been sent down to the Provider (the system prompt and the user input).
 	if len(fp.gotMsgs) != 2 {
 		t.Fatalf("msgs len: got %d, want 2", len(fp.gotMsgs))
 	}
@@ -96,13 +100,13 @@ func TestAgentReply(t *testing.T) {
 // `{role:"system", content:""}` message in that case — empty system
 // messages are garbage data that some models react to in surprising ways,
 // so Agent.Reply has an explicit `if a.system != ""` guard around the
-// system-message append.
+// system-message appended.
 //
 // This test exists specifically to lock that guard in place: if a future
 // refactor removes the `if`, this test will fail because gotMsgs would
 // contain two messages instead of one.
 func TestAgentReply_EmptySystem(t *testing.T) {
-	fp := &fakeProvider{responses: []fakeResponse{{reply: "ok"}}}
+	fp := &fakeProvider{responses: []fakeResponse{{reply: provider.Message{Role: "assistant", Content: "ok"}}}}
 	a := New(fp, "")
 
 	if _, err := a.Reply(context.Background(), "hello"); err != nil {
@@ -131,13 +135,19 @@ func TestAgentReply_EmptySystem(t *testing.T) {
 // If a future refactor breaks the history (e.g. someone wires up a new
 // per-call slice instead of appending to a.history, or forgets to record
 // the assistant reply), this test will fail because the second call's
-// msgs will be too short or missing the prior turns.
+// msgs will be too short or miss the prior turns.
 func TestAgentReply_RemembersHistory(t *testing.T) {
 	const system = "you are a helpful assistant"
 	fp := &fakeProvider{
 		responses: []fakeResponse{
-			{reply: "nice to meet you, xiaoming"}, // turn 1 reply
-			{reply: "your name is xiaoming"},      // turn 2 reply
+			{reply: provider.Message{
+				Role:    "assistant",
+				Content: "nice to meet you, xiaoming",
+			}}, // turn 1 reply
+			{reply: provider.Message{
+				Role:    "assistant",
+				Content: "your name is xiaoming",
+			}}, // turn 2 reply
 		},
 	}
 	a := New(fp, system)
@@ -172,7 +182,7 @@ func TestAgentReply_RemembersHistory(t *testing.T) {
 		t.Fatalf("msgs len on second call: got %d, want %d", len(fp.gotMsgs), len(want))
 	}
 	for i := range want {
-		if fp.gotMsgs[i] != want[i] {
+		if fp.gotMsgs[i].Role != want[i].Role || fp.gotMsgs[i].Content != want[i].Content {
 			t.Errorf("msgs[%d]: got %+v, want %+v", i, fp.gotMsgs[i], want[i])
 		}
 	}
@@ -189,14 +199,17 @@ func TestAgentReply_RemembersHistory(t *testing.T) {
 // removes the wrong element, it could silently corrupt earlier turns
 // instead of just removing the new user. So we run a successful turn 1
 // first, then make turn 2 fail, then assert that history is exactly what
-// it was after turn 1 — same length, same contents.
+// it was after turn 1 — the same length, same contents.
 func TestAgentReply_RollsBackOnError(t *testing.T) {
 	const system = "you are a helpful assistant"
 	boom := errors.New("provider boom")
 	fp := &fakeProvider{
 		responses: []fakeResponse{
-			{reply: "ok"}, // turn 1: success
-			{err: boom},   // turn 2: failure
+			{reply: provider.Message{
+				Role:    "assistant",
+				Content: "ok",
+			}}, // turn 1: success
+			{err: boom}, // turn 2: failure
 		},
 	}
 	a := New(fp, system)

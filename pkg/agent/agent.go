@@ -34,14 +34,14 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 	}
 	msgs = append(msgs, a.history...) // Add the entire history to the message list (including the userText this time).
 
-	reply, err := a.provider.Chat(ctx, msgs)
+	reply, err := a.provider.Chat(ctx, msgs, nil)
 	if err != nil {
 		// If the provider fails, remove the last message from the history.
 		a.history = a.history[:len(a.history)-1]
 		return "", err
 	} else {
-		a.history = append(a.history, provider.Message{Role: "assistant", Content: reply})
+		a.history = append(a.history, reply)
 	}
 
-	return reply, err
+	return reply.Content, err
 }

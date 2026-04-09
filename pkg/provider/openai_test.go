@@ -15,9 +15,9 @@ func TestOpenAIChat(t *testing.T) {
 	o := NewOpenAI(key, "gpt-4o-mini")
 	got, err := o.Chat(context.Background(), []Message{
 		{Role: "user", Content: "say hi in 3 words"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("got: %q", got)
+	t.Logf("got: %+v", got)
 }
