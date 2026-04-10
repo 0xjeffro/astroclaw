@@ -8,10 +8,12 @@ import (
 )
 
 type Agent struct {
-	provider provider.Provider
-	system   string
-	history  []provider.Message
-	tools    *tool.Registry
+	provider     provider.Provider
+	system       string
+	history      []provider.Message
+	tools        *tool.Registry
+	OnToolCall   func(id string, toolName string, args string)   // called before tool execution, nil = silent
+	OnToolResult func(id string, toolName string, result string) // called after tool execution, nil = silent
 }
 
 func New(p provider.Provider, system string, tools *tool.Registry) *Agent {
@@ -72,11 +74,20 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 				continue // continue to the next tool call
 			}
 
+			if a.OnToolCall != nil {
+				a.OnToolCall(tc.ID, tc.Function.Name, tc.Function.Arguments)
+			}
+
 			result, err := t.Run(tc.Function.Arguments)
 			if err != nil {
 				// Tool failed, use the error as a tool result.
 				result = fmt.Sprintf("error: %v", err)
 			}
+
+			if a.OnToolResult != nil {
+				a.OnToolResult(tc.ID, tc.Function.Name, result)
+			}
+
 			a.history = append(a.history, provider.Message{
 				Role:       "tool",
 				ToolCallID: tc.ID,

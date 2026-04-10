@@ -23,7 +23,13 @@ func main() {
 	registry.Register(tool.GetCurrentTime)
 	registry.Register(tool.EvalArithmetic)
 
-	a := agent.New(p, "", registry)
+	a := agent.New(p, "Respond in plain text. Do not use LaTeX or markdown formatting.", registry)
+	a.OnToolCall = func(id string, name string, args string) {
+		_, _ = fmt.Fprintf(os.Stderr, "⚡ [%s] calling %s(%s)\n", id, name, args)
+	}
+	a.OnToolResult = func(id string, name string, result string) {
+		_, _ = fmt.Fprintf(os.Stderr, "✓ [%s] %s → %s\n", id, name, result)
+	}
 
 	fmt.Println("iClaw - type /exit to quit")
 	scanner := bufio.NewScanner(os.Stdin)
