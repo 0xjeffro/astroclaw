@@ -21,6 +21,7 @@ func main() {
 
 	registry := tool.NewRegistry()
 	registry.Register(tool.GetCurrentTime)
+	registry.Register(tool.EvalArithmetic)
 
 	a := agent.New(p, "", registry)
 
