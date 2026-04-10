@@ -2,17 +2,20 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"iclaw/pkg/provider"
+	"iclaw/pkg/tool"
 )
 
 type Agent struct {
 	provider provider.Provider
 	system   string
 	history  []provider.Message
+	tools    *tool.Registry
 }
 
-func New(p provider.Provider, system string) *Agent {
-	return &Agent{provider: p, system: system}
+func New(p provider.Provider, system string, tools *tool.Registry) *Agent {
+	return &Agent{provider: p, system: system, tools: tools}
 }
 
 func (a *Agent) ClearHistory() {
@@ -25,23 +28,82 @@ func (a *Agent) History() []provider.Message {
 
 func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 
+	historyLen := len(a.history)
 	// Add the user message to the history.
 	a.history = append(a.history, provider.Message{Role: "user", Content: userText})
+	providerTools := toProviderTools(a.tools)
 
-	var msgs []provider.Message
-	if a.system != "" { // If the system prompt is non-empty, add it to the history.
-		msgs = append(msgs, provider.Message{Role: "system", Content: a.system})
-	}
-	msgs = append(msgs, a.history...) // Add the entire history to the message list (including the userText this time).
+	const maxSteps = 10
+	for step := 0; step < maxSteps; step++ {
+		// Construct the message list for this call.
+		var msgs []provider.Message
+		if a.system != "" { // If the system prompt is non-empty, add it to the history.
+			msgs = append(msgs, provider.Message{Role: "system", Content: a.system})
+		}
+		msgs = append(msgs, a.history...) // Add the entire history to the message list (including the userText this time).
 
-	reply, err := a.provider.Chat(ctx, msgs, nil)
-	if err != nil {
-		// If the provider fails, remove the last message from the history.
-		a.history = a.history[:len(a.history)-1]
-		return "", err
-	} else {
+		// Call the provider with the full message list and tools.
+		reply, err := a.provider.Chat(ctx, msgs, providerTools)
+
+		if err != nil {
+			a.history = a.history[:historyLen] // Clear any messages added during this step, including the user message
+			return "", err
+		}
+
+		// Append the assistant's message to the history.
 		a.history = append(a.history, reply)
+
+		// If the provider returned no tool calls, this is the last step.
+		if len(reply.ToolCalls) == 0 {
+			return reply.Content, nil
+		}
+
+		// Otherwise, call the tool and append the result to the history.
+		for _, tc := range reply.ToolCalls {
+			t, ok := a.tools.Get(tc.Function.Name)
+
+			if !ok {
+				// Tool isn't found, return an error as a tool result.
+				a.history = append(a.history, provider.Message{
+					Role:       "tool",
+					ToolCallID: tc.ID,
+					Content:    fmt.Sprintf("error: tool %q not found", tc.Function.Name),
+				})
+				continue // continue to the next tool call
+			}
+
+			result, err := t.Run(tc.Function.Arguments)
+			if err != nil {
+				// Tool failed, use the error as a tool result.
+				result = fmt.Sprintf("error: %v", err)
+			}
+			a.history = append(a.history, provider.Message{
+				Role:       "tool",
+				ToolCallID: tc.ID,
+				Content:    result,
+			})
+		}
+
 	}
 
-	return reply.Content, err
+	return "", fmt.Errorf("agent: max steps exceeded")
+}
+
+func toProviderTools(reg *tool.Registry) []provider.Tool {
+	if reg == nil {
+		return nil
+	}
+	allTools := reg.List()
+	out := make([]provider.Tool, 0, len(allTools))
+	for _, t := range allTools {
+		out = append(out, provider.Tool{
+			Type: "function",
+			Function: provider.ToolFunction{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.Parameters,
+			},
+		})
+	}
+	return out
 }

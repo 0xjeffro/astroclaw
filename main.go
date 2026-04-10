@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/provider"
+	"iclaw/pkg/tool"
 	"log"
 	"os"
 )
@@ -17,7 +18,11 @@ func main() {
 	}
 
 	p := provider.NewOpenAI(key, "gpt-4o-mini")
-	a := agent.New(p, "")
+
+	registry := tool.NewRegistry()
+	registry.Register(tool.GetCurrentTime)
+
+	a := agent.New(p, "", registry)
 
 	fmt.Println("iClaw - type /exit to quit")
 	scanner := bufio.NewScanner(os.Stdin)

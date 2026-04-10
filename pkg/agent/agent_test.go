@@ -69,7 +69,7 @@ func TestAgentReply(t *testing.T) {
 			{reply: provider.Message{Role: "assistant", Content: reply}},
 		},
 	}
-	a := New(fp, system)
+	a := New(fp, system, nil)
 
 	// (1) The Provider's reply should propagate through Agent unchanged.
 	got, err := a.Reply(context.Background(), user)
@@ -107,7 +107,7 @@ func TestAgentReply(t *testing.T) {
 // contain two messages instead of one.
 func TestAgentReply_EmptySystem(t *testing.T) {
 	fp := &fakeProvider{responses: []fakeResponse{{reply: provider.Message{Role: "assistant", Content: "ok"}}}}
-	a := New(fp, "")
+	a := New(fp, "", nil)
 
 	if _, err := a.Reply(context.Background(), "hello"); err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestAgentReply_RemembersHistory(t *testing.T) {
 			}}, // turn 2 reply
 		},
 	}
-	a := New(fp, system)
+	a := New(fp, system, nil)
 	ctx := context.Background()
 
 	// Turn 1: introduce a name. We don't assert on this call's msgs;
@@ -212,7 +212,7 @@ func TestAgentReply_RollsBackOnError(t *testing.T) {
 			{err: boom}, // turn 2: failure
 		},
 	}
-	a := New(fp, system)
+	a := New(fp, system, nil)
 	ctx := context.Background()
 
 	// Turn 1: succeed so history has a real (user, assistant) pair.
