@@ -23,6 +23,7 @@ func main() {
 	registry.Register(tool.GetCurrentTime)
 	registry.Register(tool.EvalArithmetic)
 	registry.Register(tool.ReadFile)
+	registry.Register(tool.ExecCommand)
 
 	a := agent.New(p, "Respond in plain text. Do not use LaTeX or markdown formatting.", registry)
 	a.OnToolCall = func(id string, name string, args string) {
