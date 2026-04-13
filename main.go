@@ -24,6 +24,7 @@ func main() {
 	registry.Register(tool.EvalArithmetic)
 	registry.Register(tool.ReadFile)
 	registry.Register(tool.ExecCommand)
+	registry.Register(tool.WriteFile)
 
 	a := agent.New(p, "Respond in plain text. Do not use LaTeX or markdown formatting.", registry)
 	a.OnToolCall = func(id string, name string, args string) {
