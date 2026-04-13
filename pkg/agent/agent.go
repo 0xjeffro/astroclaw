@@ -100,6 +100,11 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 	return "", fmt.Errorf("agent: max steps exceeded")
 }
 
+// toProviderTools converts tool.Tool (internal, contains Run function) into
+// provider.Tool (serializable, sent to LLM). The Run function is stripped
+// because it cannot be serialized to JSON. Each Provider implementation
+// decides how to serialize the result, for example, OpenAI uses it as-is, Anthropic
+// re-maps the fields to its own format inside Chat.
 func toProviderTools(reg *tool.Registry) []provider.Tool {
 	if reg == nil {
 		return nil
