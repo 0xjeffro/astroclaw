@@ -72,7 +72,7 @@ func isRetryableStatus(status int) bool {
 // retryDelay determines how long to wait before the next retry attempt.
 // Priority:
 //  1. Retry-After header as numeric seconds (e.g. "30")
-//  2. Retry-After header as HTTP date (e.g. "Sun, 13 Apr 2026 22:10:30 GMT")
+//  2. Retry-After header as HTTP date (e.g. "Monday, 13 Apr 2026 22:10:30 GMT")
 //  3. Fallback: linear backoff = (attempt + 1) seconds
 //
 // The result is clamped to [0, 60s] to prevent absurdly long waits from
