@@ -46,7 +46,7 @@ func (o *OpenAI) Chat(ctx context.Context, msgs []Message, tools []Tool) (Messag
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+o.APIKey)
 
-	resp, err := o.HTTP.Do(req)
+	resp, err := doWithRetry(o.HTTP, req, reqBody)
 	if err != nil {
 		return Message{}, fmt.Errorf("do request: %w", err)
 	}

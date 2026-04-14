@@ -71,7 +71,7 @@ func (a *Anthropic) Chat(ctx context.Context, msgs []Message, tools []Tool) (Mes
 	req.Header.Set("x-api-key", a.APIKey)             // Anthropic uses x-api-key, not Authorization Bearer
 	req.Header.Set("anthropic-version", "2023-06-01") // Required version header
 
-	resp, err := a.HTTP.Do(req)
+	resp, err := doWithRetry(a.HTTP, req, reqBody)
 	if err != nil {
 		return Message{}, fmt.Errorf("failed to send request: %w", err)
 	}
