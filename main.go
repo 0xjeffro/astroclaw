@@ -12,12 +12,14 @@ import (
 )
 
 func main() {
-	key := os.Getenv("OPENAI_API_KEY")
-	if key == "" {
-		log.Fatal("OPENAI_API_KEY not set")
+	var p provider.Provider
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		p = provider.NewAnthropic(key, "claude-sonnet-4-20250514")
+	} else if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+		p = provider.NewOpenAI(key, "gpt-4o-mini")
+	} else {
+		log.Fatal("OPENAI_API_KEY or ANTHROPIC_API_KEY must be set")
 	}
-
-	p := provider.NewOpenAI(key, "gpt-4o-mini")
 
 	registry := tool.NewRegistry()
 	registry.Register(tool.GetCurrentTime)
