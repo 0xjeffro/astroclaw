@@ -43,8 +43,15 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 	for step := 0; step < maxSteps; step++ {
 		// Construct the message list for this call.
 		var msgs []provider.Message
-		if a.system != "" { // If the system prompt is non-empty, add it to the history.
-			msgs = append(msgs, provider.Message{Role: "system", Content: a.system})
+		if a.system != "" || a.summary != "" { // If the system prompt or summary is not empty, add them to the history.
+			systemContent := a.system
+			if a.summary != "" {
+				if systemContent != "" {
+					systemContent += "\n\n"
+				}
+				systemContent += "Previous conversation summary:\n" + a.summary
+			}
+			msgs = append(msgs, provider.Message{Role: "system", Content: systemContent})
 		}
 		msgs = append(msgs, a.history...) // Add the entire history to the message list (including the userText this time).
 
