@@ -2,6 +2,7 @@ package agent
 
 import (
 	"iclaw/pkg/provider"
+	"strings"
 	"testing"
 )
 
@@ -349,5 +350,143 @@ func TestIsOverBudget_SummaryCountedInBudget(t *testing.T) {
 	a.summary = string(make([]byte, 10000)) // 10K chars ≈ 4000 tokens
 	if !a.isOverBudget() {
 		t.Error("large summary should push total over 5000-token budget")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Force compression tests
+// ---------------------------------------------------------------------------
+
+// TestForceCompress_DropsOldestHalf verifies that forceCompress cuts at the
+// midpoint Turn boundary, keeping roughly the newest 50% of Turns and
+// dropping the oldest 50%.
+func TestForceCompress_DropsOldestHalf(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.history = []provider.Message{
+		{Role: "user", Content: "turn1"}, // Turn 1 — boundary 0
+		{Role: "assistant", Content: "reply1"},
+		{Role: "user", Content: "turn2"}, // Turn 2 — boundary 2
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"}, // Turn 3 — boundary 4
+		{Role: "assistant", Content: "reply3"},
+	}
+	// boundaries = [0, 2, 4], midpoint = boundaries[3/2] = boundaries[1] = 2
+	a.forceCompress()
+
+	if len(a.history) != 4 {
+		t.Fatalf("history len: got %d, want 4", len(a.history))
+	}
+	if a.history[0].Content != "turn2" {
+		t.Errorf("first message after compress: got %q, want %q", a.history[0].Content, "turn2")
+	}
+}
+
+// TestForceCompress_PreservesToolCallPairs verifies that truncation at Turn
+// boundaries keeps tool_call/tool_result pairs intact. If we cut in the
+// middle of a tool chain, the model would see orphaned messages.
+func TestForceCompress_PreservesToolCallPairs(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.history = []provider.Message{
+		{Role: "user", Content: "turn1"}, // Turn 1
+		{Role: "assistant", Content: "", ToolCalls: []provider.ToolCall{{ID: "1"}}},
+		{Role: "tool", Content: "result1", ToolCallID: "1"},
+		{Role: "assistant", Content: "done1"},
+		{Role: "user", Content: "turn2"}, // Turn 2
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"}, // Turn 3
+		{Role: "assistant", Content: "reply3"},
+	}
+	// boundaries = [0, 4, 6], midpoint = boundaries[1] = 4
+	a.forceCompress()
+
+	// Turn 1 (with tool chain) should be fully dropped, Turn 2+3 kept.
+	if len(a.history) != 4 {
+		t.Fatalf("history len: got %d, want 4", len(a.history))
+	}
+	if a.history[0].Content != "turn2" {
+		t.Errorf("first message: got %q, want %q", a.history[0].Content, "turn2")
+	}
+}
+
+// TestForceCompress_SetsSummaryNote verifies that forceCompress records
+// how many messages were dropped, so the model knows context was lost.
+func TestForceCompress_SetsSummaryNote(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.history = []provider.Message{
+		{Role: "user", Content: "a"},
+		{Role: "assistant", Content: "b"},
+		{Role: "user", Content: "c"},
+		{Role: "assistant", Content: "d"},
+	}
+	a.forceCompress()
+
+	if a.summary == "" {
+		t.Fatal("summary should contain truncation note")
+	}
+	if !strings.Contains(a.summary, "dropped 2 oldest messages") {
+		t.Errorf("summary %q should mention dropped count", a.summary)
+	}
+}
+
+// TestForceCompress_AppendToExistingSummary verifies that if a summary
+// already exists (from a prior summarization), the truncation note is
+// appended rather than replacing it.
+func TestForceCompress_AppendToExistingSummary(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.summary = "user's name is xiaoming"
+	a.history = []provider.Message{
+		{Role: "user", Content: "a"},
+		{Role: "assistant", Content: "b"},
+		{Role: "user", Content: "c"},
+		{Role: "assistant", Content: "d"},
+	}
+	a.forceCompress()
+
+	if !strings.Contains(a.summary, "user's name is xiaoming") {
+		t.Error("original summary should be preserved")
+	}
+	if !strings.Contains(a.summary, "Emergency compression") {
+		t.Error("truncation note should be appended")
+	}
+}
+
+// TestForceCompress_TooShortToCompress verifies that history with ≤2
+// messages is left untouched — cutting it would make things worse.
+func TestForceCompress_TooShortToCompress(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.history = []provider.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	}
+	a.forceCompress()
+
+	if len(a.history) != 2 {
+		t.Errorf("history should be unchanged: got %d messages, want 2", len(a.history))
+	}
+}
+
+// TestForceCompress_SingleTurn verifies the edge case where history has
+// only one Turn (one user message + many tool calls). cutIndex would be 0,
+// so forceCompress returns without modifying history (can't cut before the
+// only user message).
+func TestForceCompress_SingleTurn(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 0)
+	a.history = []provider.Message{
+		{Role: "user", Content: "do something"},
+		{Role: "assistant", Content: "", ToolCalls: []provider.ToolCall{{ID: "1"}}},
+		{Role: "tool", Content: "result", ToolCallID: "1"},
+		{Role: "assistant", Content: "done"},
+	}
+	originalLen := len(a.history)
+	a.forceCompress()
+
+	if len(a.history) != originalLen {
+		t.Errorf("single Turn: history should be unchanged, got %d want %d", len(a.history), originalLen)
 	}
 }

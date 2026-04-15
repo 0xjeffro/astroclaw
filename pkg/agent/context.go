@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"iclaw/pkg/provider"
 )
 
@@ -109,4 +110,48 @@ func findSafeBoundary(history []provider.Message, targetIndex int) int {
 
 	// No boundary before targetIndex, return the first one after.
 	return boundaries[0]
+}
+
+// forceCompress drops the oldest ~50% of Turns from history. This is the
+// emergency strategy when summarization fails or history is still over
+// budget after summarization. Always cuts at Turn boundaries to keep
+// tool_call/tool_result pairs intact.
+func (a *Agent) forceCompress() {
+	// Too few messages to compress, not worth cutting.
+	if len(a.history) <= 2 {
+		return
+	}
+
+	boundaries := parseTurnBoundaries(a.history)
+
+	var cutIndex int
+	if len(boundaries) <= 1 {
+		// Only 0 or 1 Turn, can't split by Turn. Fall back to keeping
+		// only the last user message.
+		for i := len(a.history) - 1; i >= 0; i-- {
+			if a.history[i].Role == "user" {
+				cutIndex = i
+				break
+			}
+		}
+	} else {
+		// Cut at the midpoint Turn boundary, drops roughly the oldest 50%.
+		cutIndex = boundaries[len(boundaries)/2]
+	}
+
+	if cutIndex <= 0 {
+		return
+	}
+
+	dropped := cutIndex
+	a.history = a.history[cutIndex:]
+
+	// Record how many messages were dropped, so the model (and the summary)
+	// know that earlier context was lost.
+	note := fmt.Sprintf("[Emergency compression dropped %d oldest messages due to context limit]", dropped)
+	if a.summary != "" {
+		a.summary += "\n" + note
+	} else {
+		a.summary = note
+	}
 }
