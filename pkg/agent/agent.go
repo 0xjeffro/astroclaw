@@ -8,16 +8,20 @@ import (
 )
 
 type Agent struct {
-	provider     provider.Provider
-	system       string
-	history      []provider.Message
-	tools        *tool.Registry
+	provider provider.Provider
+	system   string
+	history  []provider.Message
+	tools    *tool.Registry
+
+	contextWindow int    // model's context window size in tokens, 0 = no limit
+	summary       string // LLM-generated summary of older conversation turns
+
 	OnToolCall   func(id string, toolName string, args string)   // called before tool execution, nil = silent
 	OnToolResult func(id string, toolName string, result string) // called after tool execution, nil = silent
 }
 
-func New(p provider.Provider, system string, tools *tool.Registry) *Agent {
-	return &Agent{provider: p, system: system, tools: tools}
+func New(p provider.Provider, system string, tools *tool.Registry, contextWindow int) *Agent {
+	return &Agent{provider: p, system: system, tools: tools, contextWindow: contextWindow}
 }
 
 func (a *Agent) ClearHistory() {

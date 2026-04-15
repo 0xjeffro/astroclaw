@@ -281,3 +281,73 @@ func TestFindSafeBoundary_FallbackToAfter(t *testing.T) {
 		t.Errorf("fallback to after: got %d, want 2", got)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Budget check tests
+// ---------------------------------------------------------------------------
+
+// TestIsOverBudget_NoLimit verifies that when contextWindow is 0 (no limit),
+// isOverBudget always returns false regardless of history size. This ensures
+// that agents created without a context window (e.g. in tests) never trigger
+// compression.
+func TestIsOverBudget_NoLimit(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "system prompt", nil, 0)
+	// Add a bunch of history — should still not be over budget.
+	for i := 0; i < 100; i++ {
+		a.history = append(a.history, provider.Message{Role: "user", Content: "hello world this is a long message"})
+	}
+	if a.isOverBudget() {
+		t.Error("contextWindow=0 should never be over budget")
+	}
+}
+
+// TestIsOverBudget_UnderBudget verifies that a small history within a
+// generous context window returns false.
+func TestIsOverBudget_UnderBudget(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "short system", nil, 128000) // 128K window
+	a.history = []provider.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi there"},
+	}
+	if a.isOverBudget() {
+		t.Error("small history in 128K window should not be over budget")
+	}
+}
+
+// TestIsOverBudget_OverBudget verifies that a large history exceeding a
+// small context window returns true. We use a tiny window (500 tokens) and
+// fill history with enough messages to exceed it.
+func TestIsOverBudget_OverBudget(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "system", nil, 500) // tiny 500-token window
+	// Each message ≈ 14 tokens. 500 - 4096 (maxResponseTokens) is already
+	// negative, so ANY history should be over budget with this tiny window.
+	a.history = []provider.Message{
+		{Role: "user", Content: "hello"},
+	}
+	if !a.isOverBudget() {
+		t.Error("history in 500-token window should be over budget (maxResponseTokens alone exceeds it)")
+	}
+}
+
+// TestIsOverBudget_SummaryCountedInBudget verifies that the summary field
+// is included in the budget calculation. A large summary should push the
+// total over a tight budget.
+func TestIsOverBudget_SummaryCountedInBudget(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 5000)
+	a.history = []provider.Message{
+		{Role: "user", Content: "hi"},
+	}
+	// Without summary: should be under budget.
+	if a.isOverBudget() {
+		t.Fatal("should be under budget without summary")
+	}
+	// Add a huge summary that pushes it over.
+	a.summary = string(make([]byte, 10000)) // 10K chars ≈ 4000 tokens
+	if !a.isOverBudget() {
+		t.Error("large summary should push total over 5000-token budget")
+	}
+}

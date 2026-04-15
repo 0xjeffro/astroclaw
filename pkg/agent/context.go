@@ -5,6 +5,23 @@ import (
 	"iclaw/pkg/provider"
 )
 
+const maxResponseTokens = 4096 // reserved for model's response
+
+// isOverBudget checks whether the current history + system + summary + tools
+// exceed the model's context window. Returns false if contextWindow is 0
+// (no limit configured).
+func (a *Agent) isOverBudget() bool {
+	if a.contextWindow <= 0 {
+		return false
+	}
+	systemTokens := len(a.system) * 2 / 5
+	summaryTokens := len(a.summary) * 2 / 5
+	historyTokens := estimateTokens(a.history)
+	toolTokens := estimateToolTokens(toProviderTools(a.tools))
+	total := systemTokens + summaryTokens + historyTokens + toolTokens + maxResponseTokens
+	return total > a.contextWindow
+}
+
 // estimateMessageTokens estimates the token count of a single message
 // using a character-based heuristic: ~2.5 characters per token, no external tokenizer needed.
 // Counts: (Role + Content) ToolCall metadata (ID, name, arguments) + ToolCallID

@@ -29,7 +29,7 @@ func main() {
 	registry.Register(tool.WriteFile)
 	registry.Register(tool.EditFile)
 
-	a := agent.New(p, "Respond in plain text. Do not use LaTeX or markdown formatting.", registry)
+	a := agent.New(p, "Respond in plain text. Do not use LaTeX or markdown formatting.", registry, 128000)
 	a.OnToolCall = func(id string, name string, args string) {
 		_, _ = fmt.Fprintf(os.Stderr, "⚡ [%s] calling %s(%s)\n", id, name, args)
 	}
