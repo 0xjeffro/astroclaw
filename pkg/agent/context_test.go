@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"iclaw/pkg/provider"
 	"strings"
 	"testing"
@@ -488,5 +490,207 @@ func TestForceCompress_SingleTurn(t *testing.T) {
 
 	if len(a.history) != originalLen {
 		t.Errorf("single Turn: history should be unchanged, got %d want %d", len(a.history), originalLen)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// LLM summarization tests
+// ---------------------------------------------------------------------------
+
+// TestSummarizeOldTurns_Basic verifies the happy path: LLM returns a
+// summary, oldest Turns are removed, last 2 Turns are kept intact.
+func TestSummarizeOldTurns_Basic(t *testing.T) {
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{Role: "assistant", Content: "User discussed goroutines and fixed a bug."}},
+		},
+	}
+	a := New(fp, "", nil, 128000)
+	a.history = []provider.Message{
+		{Role: "user", Content: "turn1"},
+		{Role: "assistant", Content: "reply1"},
+		{Role: "user", Content: "turn2"},
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"},
+		{Role: "assistant", Content: "reply3"},
+		{Role: "user", Content: "turn4"},
+		{Role: "assistant", Content: "reply4"},
+	}
+
+	err := a.summarizeOldTurns(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.history) != 4 {
+		t.Fatalf("history len: got %d, want 4", len(a.history))
+	}
+	if a.history[0].Content != "turn3" {
+		t.Errorf("first remaining message: got %q, want %q", a.history[0].Content, "turn3")
+	}
+	if !strings.Contains(a.summary, "goroutines") {
+		t.Errorf("summary %q should contain the LLM's response", a.summary)
+	}
+}
+
+// TestSummarizeOldTurns_IncludesToolResults verifies that small tool
+// results are included in the summarization input, not filtered out.
+func TestSummarizeOldTurns_IncludesToolResults(t *testing.T) {
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{Role: "assistant", Content: "summary with tool context"}},
+		},
+	}
+	a := New(fp, "", nil, 128000)
+	a.history = []provider.Message{
+		{Role: "user", Content: "what time is it"},
+		{Role: "assistant", Content: "", ToolCalls: []provider.ToolCall{{ID: "1"}}},
+		{Role: "tool", Content: "2026-04-14T12:00:00Z", ToolCallID: "1"},
+		{Role: "assistant", Content: "it's noon"},
+		{Role: "user", Content: "turn2"},
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"},
+		{Role: "assistant", Content: "reply3"},
+	}
+
+	_ = a.summarizeOldTurns(context.Background())
+
+	if len(fp.gotMsgs) < 2 {
+		t.Fatalf("expected at least 2 messages sent to LLM, got %d", len(fp.gotMsgs))
+	}
+	if !strings.Contains(fp.gotMsgs[1].Content, "2026-04-14T12:00:00Z") {
+		t.Errorf("summarization input should include tool result, got: %q", fp.gotMsgs[1].Content)
+	}
+}
+
+// TestSummarizeOldTurns_TooFewMessages verifies that summarization is
+// skipped when history has 4 or fewer messages.
+func TestSummarizeOldTurns_TooFewMessages(t *testing.T) {
+	fp := &fakeProvider{}
+	a := New(fp, "", nil, 128000)
+	a.history = []provider.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "assistant", Content: "hi"},
+	}
+
+	err := a.summarizeOldTurns(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.history) != 2 {
+		t.Errorf("history should be unchanged: got %d, want 2", len(a.history))
+	}
+	if fp.calls != 0 {
+		t.Errorf("no LLM calls should be made: got %d", fp.calls)
+	}
+}
+
+// TestSummarizeOldTurns_LLMFailure verifies that when the LLM fails,
+// the fallback summary is used instead. History is still truncated.
+func TestSummarizeOldTurns_LLMFailure(t *testing.T) {
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{err: errors.New("network error")},
+		},
+	}
+	a := New(fp, "", nil, 128000)
+	a.history = []provider.Message{
+		{Role: "user", Content: "turn1"},
+		{Role: "assistant", Content: "reply1"},
+		{Role: "user", Content: "turn2"},
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"},
+		{Role: "assistant", Content: "reply3"},
+	}
+
+	err := a.summarizeOldTurns(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(a.summary, "Conversation summary:") {
+		t.Errorf("expected fallback summary, got: %q", a.summary)
+	}
+	if len(a.history) != 4 {
+		t.Fatalf("history len: got %d, want 4", len(a.history))
+	}
+}
+
+// TestSummarizeOldTurns_AppendsToExistingSummary verifies that new
+// summaries are appended to existing ones, preserving earlier context.
+func TestSummarizeOldTurns_AppendsToExistingSummary(t *testing.T) {
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{Role: "assistant", Content: "new summary content"}},
+		},
+	}
+	a := New(fp, "", nil, 128000)
+	a.summary = "user's name is xiaoming"
+	a.history = []provider.Message{
+		{Role: "user", Content: "turn1"},
+		{Role: "assistant", Content: "reply1"},
+		{Role: "user", Content: "turn2"},
+		{Role: "assistant", Content: "reply2"},
+		{Role: "user", Content: "turn3"},
+		{Role: "assistant", Content: "reply3"},
+	}
+
+	_ = a.summarizeOldTurns(context.Background())
+
+	if !strings.Contains(a.summary, "user's name is xiaoming") {
+		t.Error("existing summary should be preserved")
+	}
+	if !strings.Contains(a.summary, "new summary content") {
+		t.Error("new summary should be appended")
+	}
+}
+
+// TestFallbackSummary verifies the crude fallback: each message is
+// truncated to 10% (min 200 chars) and joined with " | ".
+func TestFallbackSummary(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: "user", Content: "hello world"},
+		{Role: "assistant", Content: "goodbye world"},
+	}
+	got := fallbackSummary(msgs)
+
+	if !strings.HasPrefix(got, "Conversation summary: ") {
+		t.Errorf("should start with 'Conversation summary: ', got: %q", got)
+	}
+	if !strings.Contains(got, "user: hello world") {
+		t.Errorf("should contain user message, got: %q", got)
+	}
+	if !strings.Contains(got, " | ") {
+		t.Errorf("should join with ' | ', got: %q", got)
+	}
+}
+
+// TestIsContextLengthError verifies detection of context-length errors
+// from real API responses. Each test case is based on actual error strings
+// from OpenAI, Anthropic, or other OpenAI-compatible providers.
+func TestIsContextLengthError(t *testing.T) {
+	tests := []struct {
+		msg  string
+		want bool
+	}{
+		// OpenAI: exact error code
+		{"openai: status 400: context_length_exceeded", true},
+		// Anthropic: exact error message
+		{"input length and max_tokens exceed context limit: 150000 + 4096 > 128000", true},
+		// OpenAI-compatible providers
+		{"context_window_exceeded", true},
+		{"This model's maximum context length is 128000 tokens", true},
+		{"token limit exceeded", true},
+		{"request has too many tokens", true},
+		{"prompt is too long", true},
+		{"request too large for model", true},
+		// Should NOT match
+		{"network timeout", false},
+		{"unauthorized", false},
+		{"max_tokens must be greater than 0", false}, // not a context error
+	}
+	for _, tt := range tests {
+		got := isContextLengthError(errors.New(tt.msg))
+		if got != tt.want {
+			t.Errorf("isContextLengthError(%q): got %v, want %v", tt.msg, got, tt.want)
+		}
 	}
 }
