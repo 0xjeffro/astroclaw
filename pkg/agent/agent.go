@@ -41,6 +41,20 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 
 	const maxSteps = 10
 	for step := 0; step < maxSteps; step++ {
+
+		// Check Context Budget and summarize old turns if needed.
+		if a.isOverBudget() {
+			if err := a.summarizeOldTurns(ctx); err != nil {
+				// If summarization fails, execute force compress.
+				a.forceCompress()
+			}
+
+			// If summarization success but still exceed the budget, execute force compress.
+			if a.isOverBudget() {
+				a.forceCompress()
+			}
+		}
+
 		// Construct the message list for this call.
 		var msgs []provider.Message
 		if a.system != "" || a.summary != "" { // If the system prompt or summary is not empty, add them to the history.
