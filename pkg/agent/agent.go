@@ -16,6 +16,8 @@ type Agent struct {
 	contextWindow int    // model's context window size in tokens, 0 = no limit
 	summary       string // LLM-generated summary of older conversation turns
 
+	OnApproval func(toolName string, args string) bool // return false to deny tool execution, nil = auto-approve
+
 	OnToolCall   func(id string, toolName string, args string)   // called before tool execution, nil = silent
 	OnToolResult func(id string, toolName string, result string) // called after tool execution, nil = silent
 }
@@ -97,6 +99,22 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 					Content:    fmt.Sprintf("error: tool %q not found", tc.Function.Name),
 				})
 				continue // continue to the next tool call
+			}
+
+			// Check if this tool need user approval before execution
+			if t.NeedsApproval && a.OnApproval != nil {
+				if !a.OnApproval(tc.Function.Name, tc.Function.Arguments) {
+					a.history = append(a.history, provider.Message{
+						Role:       "tool",
+						ToolCallID: tc.ID,
+						Content: fmt.Sprintf(
+							"User rejected this %s(%s) call. The tool was NOT executed, nothing happened. "+
+								"Stop and ask the user how they want to proceed.",
+							tc.Function.Name, tc.Function.Arguments,
+						),
+					})
+					continue
+				}
 			}
 
 			if a.OnToolCall != nil {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"iclaw/pkg/provider"
+	"iclaw/pkg/tool"
 )
 
 // fakeResponse is one entry in a fakeProvider's scripted responses. Each
@@ -238,5 +240,159 @@ func TestAgentReply_RollsBackOnError(t *testing.T) {
 	// prior turn — this assertion catches that.
 	if a.history[0].Content != "first" || a.history[1].Content != "ok" {
 		t.Errorf("history corrupted after rollback: %+v", a.history)
+	}
+}
+
+// TestApproval_Denied verifies that when OnApproval returns false, the tool
+// is NOT executed and the model receives a rejection message. This is the
+// core safety guarantee: if the user says no, nothing happens.
+func TestApproval_Denied(t *testing.T) {
+	// Set up a tool that needs approval and tracks if Run was called.
+	executed := false
+	reg := tool.NewRegistry()
+	reg.Register(tool.Tool{
+		Name:          "dangerous_tool",
+		NeedsApproval: true,
+		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
+		Run: func(args string) (string, error) {
+			executed = true
+			return "executed", nil
+		},
+	})
+
+	// fakeProvider: first response triggers tool call, second is final reply.
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{
+				Role: "assistant",
+				ToolCalls: []provider.ToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: provider.ToolCallFunc{Name: "dangerous_tool", Arguments: "{}"},
+				}},
+			}},
+			{reply: provider.Message{Role: "assistant", Content: "ok, I won't do that"}},
+		},
+	}
+
+	a := New(fp, "", reg, 0)
+	a.OnApproval = func(toolName string, args string) bool {
+		return false // deny
+	}
+
+	got, err := a.Reply(context.Background(), "do something dangerous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ok, I won't do that" {
+		t.Errorf("reply: got %q", got)
+	}
+	if executed {
+		t.Error("tool should NOT have been executed after denial")
+	}
+
+	// The tool result in history should contain the rejection message.
+	found := false
+	for _, m := range a.history {
+		if m.Role == "tool" && strings.Contains(m.Content, "User rejected") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("history should contain a 'User rejected' tool result")
+	}
+}
+
+// TestApproval_Approved verifies that when OnApproval returns true, the tool
+// executes normally and its real result is returned to the model.
+func TestApproval_Approved(t *testing.T) {
+	reg := tool.NewRegistry()
+	reg.Register(tool.Tool{
+		Name:          "dangerous_tool",
+		NeedsApproval: true,
+		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
+		Run: func(args string) (string, error) {
+			return "tool executed successfully", nil
+		},
+	})
+
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{
+				Role: "assistant",
+				ToolCalls: []provider.ToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: provider.ToolCallFunc{Name: "dangerous_tool", Arguments: "{}"},
+				}},
+			}},
+			{reply: provider.Message{Role: "assistant", Content: "done"}},
+		},
+	}
+
+	a := New(fp, "", reg, 0)
+	a.OnApproval = func(toolName string, args string) bool {
+		return true // approve
+	}
+
+	got, err := a.Reply(context.Background(), "do something")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "done" {
+		t.Errorf("reply: got %q, want %q", got, "done")
+	}
+
+	// The tool result should contain the real output, not a rejection.
+	found := false
+	for _, m := range a.history {
+		if m.Role == "tool" && strings.Contains(m.Content, "tool executed successfully") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("history should contain the real tool result")
+	}
+}
+
+// TestApproval_NilCallback verifies that when OnApproval is nil (not set),
+// tools with NeedsApproval=true are auto-approved. This ensures backwards
+// compatibility: existing code that doesn't set OnApproval still works.
+func TestApproval_NilCallback(t *testing.T) {
+	executed := false
+	reg := tool.NewRegistry()
+	reg.Register(tool.Tool{
+		Name:          "dangerous_tool",
+		NeedsApproval: true,
+		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
+		Run: func(args string) (string, error) {
+			executed = true
+			return "executed", nil
+		},
+	})
+
+	fp := &fakeProvider{
+		responses: []fakeResponse{
+			{reply: provider.Message{
+				Role: "assistant",
+				ToolCalls: []provider.ToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: provider.ToolCallFunc{Name: "dangerous_tool", Arguments: "{}"},
+				}},
+			}},
+			{reply: provider.Message{Role: "assistant", Content: "done"}},
+		},
+	}
+
+	a := New(fp, "", reg, 0)
+	// OnApproval is nil (not set)
+
+	_, err := a.Reply(context.Background(), "do something")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !executed {
+		t.Error("tool should be auto-approved when OnApproval is nil")
 	}
 }

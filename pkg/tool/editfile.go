@@ -8,7 +8,8 @@ import (
 )
 
 var EditFile = Tool{
-	Name: "edit_file",
+	NeedsApproval: true,
+	Name:          "edit_file",
 	Description: "Edits a file by replacing an exact occurrence of old_text with new_text. " +
 		"old_text must appear exactly once in the file. " +
 		"Use empty new_text to delete text.",

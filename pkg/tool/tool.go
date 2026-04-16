@@ -1,10 +1,11 @@
 package tool
 
 type Tool struct {
-	Name        string
-	Description string
-	Parameters  map[string]any
-	Run         func(args string) (string, error)
+	Name          string
+	Description   string
+	Parameters    map[string]any
+	Run           func(args string) (string, error)
+	NeedsApproval bool // if true, agent ask user before executing
 }
 
 type Registry struct {

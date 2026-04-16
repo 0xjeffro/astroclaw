@@ -17,6 +17,7 @@ var ExecCommand = Tool{
 	Name: "exec_command",
 	Description: "Executes a shell command and returns its combined stdout and stderr output. " +
 		"Timeout is 30 seconds. Output is capped at 64KB.",
+	NeedsApproval: true,
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{
