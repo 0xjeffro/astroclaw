@@ -26,6 +26,17 @@ func New(p provider.Provider, system string, tools *tool.Registry, contextWindow
 	return &Agent{provider: p, system: system, tools: tools, contextWindow: contextWindow}
 }
 
+// NewFromContext creates an Agent with existing conversation context,
+// used when restoring a session. contextMessages is the Agent's compressed
+// working history, contextSummary is the LLM-generated summary of older turns.
+func NewFromContext(p provider.Provider, system string, tools *tool.Registry,
+	contextWindow int, contextMessages []provider.Message, contextSummary string) *Agent {
+	a := New(p, system, tools, contextWindow)
+	a.history = contextMessages
+	a.summary = contextSummary
+	return a
+}
+
 func (a *Agent) ClearHistory() {
 	a.history = []provider.Message{}
 }
