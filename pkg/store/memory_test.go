@@ -150,7 +150,7 @@ func TestAppendMessages_Batch(t *testing.T) {
 	session := &Session{Title: "chat"}
 	_ = s.CreateSession(ctx, session)
 
-	msgs := []*Message{
+	msgs := []Message{
 		{SessionID: session.ID, Role: "user", Content: "hello"},
 		{SessionID: session.ID, Role: "assistant", Content: "hi"},
 		{SessionID: session.ID, Role: "user", Content: "bye"},

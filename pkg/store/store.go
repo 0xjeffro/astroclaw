@@ -56,6 +56,6 @@ type Store interface {
 	DeleteSession(ctx context.Context, id string) error
 
 	AppendMessage(ctx context.Context, msg *Message) error
-	AppendMessages(ctx context.Context, msgs []*Message) error
+	AppendMessages(ctx context.Context, msgs []Message) error
 	GetMessages(ctx context.Context, sessionID string) ([]*Message, error)
 }

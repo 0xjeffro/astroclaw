@@ -86,9 +86,9 @@ func (m *MemoryStore) AppendMessage(_ context.Context, msg *Message) error {
 	return nil
 }
 
-func (m *MemoryStore) AppendMessages(ctx context.Context, msgs []*Message) error {
-	for _, msg := range msgs {
-		if err := m.AppendMessage(ctx, msg); err != nil {
+func (m *MemoryStore) AppendMessages(ctx context.Context, msgs []Message) error {
+	for i := range msgs {
+		if err := m.AppendMessage(ctx, &msgs[i]); err != nil {
 			return err
 		}
 	}
