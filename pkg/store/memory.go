@@ -86,6 +86,15 @@ func (m *MemoryStore) AppendMessage(_ context.Context, msg *Message) error {
 	return nil
 }
 
+func (m *MemoryStore) AppendMessages(ctx context.Context, msgs []*Message) error {
+	for _, msg := range msgs {
+		if err := m.AppendMessage(ctx, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *MemoryStore) GetMessages(_ context.Context, sessionID string) ([]*Message, error) {
 	if _, ok := m.sessions[sessionID]; !ok {
 		return nil, fmt.Errorf("session %q not found", sessionID)

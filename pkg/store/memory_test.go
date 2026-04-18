@@ -141,6 +141,36 @@ func TestAppendMessage_NoSession(t *testing.T) {
 	}
 }
 
+// TestAppendMessages_Batch verifies that AppendMessages writes multiple
+// messages in one call with correct sequence numbers.
+func TestAppendMessages_Batch(t *testing.T) {
+	s := NewMemoryStore()
+	ctx := context.Background()
+
+	session := &Session{Title: "chat"}
+	_ = s.CreateSession(ctx, session)
+
+	msgs := []*Message{
+		{SessionID: session.ID, Role: "user", Content: "hello"},
+		{SessionID: session.ID, Role: "assistant", Content: "hi"},
+		{SessionID: session.ID, Role: "user", Content: "bye"},
+	}
+	if err := s.AppendMessages(ctx, msgs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := s.GetMessages(ctx, session.ID)
+	if len(got) != 3 {
+		t.Fatalf("messages count: got %d, want 3", len(got))
+	}
+	// Sequence numbers should be auto-assigned: 1, 2, 3.
+	for i, m := range got {
+		if m.SequenceNumber != i+1 {
+			t.Errorf("msg[%d] seq: got %d, want %d", i, m.SequenceNumber, i+1)
+		}
+	}
+}
+
 // TestUpdateSession verifies that UpdateSession persists changes to session
 // fields including ContextMessages and ContextSummary.
 func TestUpdateSession(t *testing.T) {
