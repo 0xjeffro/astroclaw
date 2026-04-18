@@ -45,6 +45,10 @@ func (a *Agent) History() []provider.Message {
 	return a.history
 }
 
+func (a *Agent) Summary() string {
+	return a.summary
+}
+
 func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 
 	historyLen := len(a.history)
