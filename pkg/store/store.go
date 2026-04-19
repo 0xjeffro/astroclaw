@@ -2,8 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"iclaw/pkg/provider"
 	"time"
+)
+
+var (
+	ErrNotFound = errors.New("not found") // session or message doesn't exist
 )
 
 type User struct {

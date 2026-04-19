@@ -38,7 +38,7 @@ func (m *MemoryStore) CreateSession(_ context.Context, s *Session) error {
 func (m *MemoryStore) GetSession(_ context.Context, id string) (*Session, error) {
 	s, ok := m.sessions[id]
 	if !ok {
-		return nil, fmt.Errorf("session %q not found", id)
+		return nil, fmt.Errorf("session %q: %w", id, ErrNotFound)
 	}
 	return s, nil
 }
@@ -55,7 +55,7 @@ func (m *MemoryStore) ListSessions(_ context.Context, userID string) ([]*Session
 
 func (m *MemoryStore) DeleteSession(_ context.Context, id string) error {
 	if _, ok := m.sessions[id]; !ok {
-		return fmt.Errorf("session %q not found", id)
+		return fmt.Errorf("session %q: %w", id, ErrNotFound)
 	}
 	delete(m.sessions, id)
 	delete(m.messages, id)
@@ -64,7 +64,7 @@ func (m *MemoryStore) DeleteSession(_ context.Context, id string) error {
 
 func (m *MemoryStore) AppendMessage(_ context.Context, msg *Message) error {
 	if _, ok := m.sessions[msg.SessionID]; !ok {
-		return fmt.Errorf("session %q not found", msg.SessionID)
+		return fmt.Errorf("session %q: %w", msg.SessionID, ErrNotFound)
 	}
 	if msg.ID == "" {
 		msg.ID = m.nextID("m")
@@ -97,14 +97,14 @@ func (m *MemoryStore) AppendMessages(ctx context.Context, msgs []Message) error 
 
 func (m *MemoryStore) GetMessages(_ context.Context, sessionID string) ([]*Message, error) {
 	if _, ok := m.sessions[sessionID]; !ok {
-		return nil, fmt.Errorf("session %q not found", sessionID)
+		return nil, fmt.Errorf("session %q: %w", sessionID, ErrNotFound)
 	}
 	return m.messages[sessionID], nil
 }
 
 func (m *MemoryStore) UpdateSession(_ context.Context, s *Session) error {
 	if _, ok := m.sessions[s.ID]; !ok {
-		return fmt.Errorf("session %q not found", s.ID)
+		return fmt.Errorf("session %q: %w", s.ID, ErrNotFound)
 	}
 	s.UpdatedAt = time.Now()
 	m.sessions[s.ID] = s

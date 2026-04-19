@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -111,6 +112,9 @@ func TestGetSession_NotFound(t *testing.T) {
 	_, err := mgr.GetSession(context.Background(), "no-such-id")
 	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
 
@@ -242,5 +246,8 @@ func TestReply_InvalidSession(t *testing.T) {
 	_, err := mgr.Reply(context.Background(), "no-such-session", "hello")
 	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }

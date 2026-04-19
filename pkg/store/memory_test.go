@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -36,6 +37,9 @@ func TestGetSession_NotFound(t *testing.T) {
 	_, err := s.GetSession(context.Background(), "no-such-id")
 	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
 
@@ -89,8 +93,12 @@ func TestDeleteSession(t *testing.T) {
 // returns an error.
 func TestDeleteSession_NotFound(t *testing.T) {
 	s := NewMemoryStore()
-	if err := s.DeleteSession(context.Background(), "no-such-id"); err == nil {
+	err := s.DeleteSession(context.Background(), "no-such-id")
+	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
 
@@ -138,6 +146,9 @@ func TestAppendMessage_NoSession(t *testing.T) {
 	err := s.AppendMessage(context.Background(), &Message{SessionID: "no-such", Role: "user", Content: "hi"})
 	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
 
@@ -216,5 +227,8 @@ func TestUpdateSession_NotFound(t *testing.T) {
 	err := s.UpdateSession(context.Background(), &Session{ID: "no-such"})
 	if err == nil {
 		t.Error("expected error for non-existent session")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
