@@ -8,7 +8,8 @@ import (
 )
 
 var EvalArithmetic = Tool{
-	Name: "eval_arithmetic",
+	RequiresWorkspace: false,
+	Name:              "eval_arithmetic",
 	Description: "Evaluates an arithmetic expression using Go constant expression syntax. " +
 		"Supports +, -, *, /, parentheses, and decimal numbers. " +
 		"Examples: '(1+2)*3','10.0/3.0', '100-25*2'.",

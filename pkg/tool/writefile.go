@@ -8,8 +8,9 @@ import (
 )
 
 var WriteFile = Tool{
-	NeedsApproval: true,
-	Name:          "write_file",
+	NeedsApproval:     true,
+	RequiresWorkspace: true,
+	Name:              "write_file",
 	Description: "Writes content to a file. If the file already exists, overwrite must be set to true. " +
 		"Parent directories are created automatically.",
 	Parameters: map[string]any{

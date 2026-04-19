@@ -10,8 +10,9 @@ import (
 const maxReadBytes = 64 * 1024 // 64KB
 
 var ReadFile = Tool{
-	Name:        "read_file",
-	Description: "Reads the contents of a text file. Returns up to 64KB. Binary files are rejected.",
+	RequiresWorkspace: true,
+	Name:              "read_file",
+	Description:       "Reads the contents of a text file. Returns up to 64KB. Binary files are rejected.",
 	Parameters: map[string]any{
 		"type": "object",
 		"properties": map[string]any{

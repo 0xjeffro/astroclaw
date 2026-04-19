@@ -1,11 +1,12 @@
 package tool
 
 type Tool struct {
-	Name          string
-	Description   string
-	Parameters    map[string]any
-	Run           func(args string) (string, error)
-	NeedsApproval bool // if true, agent ask user before executing
+	Name              string
+	Description       string
+	Parameters        map[string]any
+	Run               func(args string) (string, error)
+	NeedsApproval     bool // if true, agent ask user before executing
+	RequiresWorkspace bool // needs filesystem/shell environment (EC2), otherwise runs serverless (Lambda)
 }
 
 type Registry struct {
