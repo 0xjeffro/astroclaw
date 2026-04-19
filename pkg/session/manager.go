@@ -46,6 +46,11 @@ func (m *Manager) ListSessions(ctx context.Context) ([]*store.Session, error) {
 	return m.store.ListSessions(ctx, "")
 }
 
+// GetSession returns a session by ID from the Store.
+func (m *Manager) GetSession(ctx context.Context, id string) (*store.Session, error) {
+	return m.store.GetSession(ctx, id)
+}
+
 // DeleteSession removes a session from Store.
 func (m *Manager) DeleteSession(ctx context.Context, id string) error {
 	return m.store.DeleteSession(ctx, id)

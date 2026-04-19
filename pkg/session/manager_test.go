@@ -37,7 +37,7 @@ func setupManager(responses []provider.Message) (*Manager, *store.MemoryStore, *
 	createFn := func(s *store.Session) *agent.Agent {
 		return agent.NewFromContext(
 			fp, s.SystemPrompt, nil, s.ContextWindow,
-			storeToProviderMessages(s.ContextMessages), s.ContextSummary,
+			StoreToProviderMessages(s.ContextMessages), s.ContextSummary,
 		)
 	}
 
@@ -86,6 +86,31 @@ func TestListSessions(t *testing.T) {
 	}
 	if len(list) != 2 {
 		t.Errorf("sessions count: got %d, want 2", len(list))
+	}
+}
+
+// TestGetSession verifies that a created session can be retrieved by ID.
+func TestGetSession(t *testing.T) {
+	mgr, _, _ := setupManager(nil)
+	ctx := context.Background()
+
+	created, _ := mgr.NewSession(ctx, "my chat")
+	got, err := mgr.GetSession(ctx, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "my chat" {
+		t.Errorf("title: got %q, want %q", got.Title, "my chat")
+	}
+}
+
+// TestGetSession_NotFound verifies that getting a non-existent session
+// returns an error. This is what /switch relies on to validate the ID.
+func TestGetSession_NotFound(t *testing.T) {
+	mgr, _, _ := setupManager(nil)
+	_, err := mgr.GetSession(context.Background(), "no-such-id")
+	if err == nil {
+		t.Error("expected error for non-existent session")
 	}
 }
 

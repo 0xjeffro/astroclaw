@@ -12,9 +12,9 @@ import (
 	"iclaw/pkg/store"
 )
 
-// storeToProviderMessages converts store messages to provider messages
+// StoreToProviderMessages converts store messages to provider messages
 // for feeding into Agent. Agent doesn't know about store types.
-func storeToProviderMessages(msgs []store.Message) []provider.Message {
+func StoreToProviderMessages(msgs []store.Message) []provider.Message {
 	out := make([]provider.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = provider.Message{
