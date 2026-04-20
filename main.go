@@ -62,7 +62,19 @@ func main() {
 		}
 	}
 
-	mgr := session.NewManager(store.NewMemoryStore(), createFn, configFn)
+	var st store.Store
+	if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
+		pgStore, err := store.NewPostgresStore(connStr)
+		if err != nil {
+			log.Fatalf("connect to database: %v", err)
+		}
+		defer func() { _ = pgStore.Close() }()
+		st = pgStore
+	} else {
+		st = store.NewMemoryStore()
+	}
+
+	mgr := session.NewManager(st, createFn, configFn)
 	ctx := context.Background()
 
 	// Create a default session on startup.
