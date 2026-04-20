@@ -30,6 +30,7 @@ type Session struct {
 	ContextSummary  string    // Agent's conversation summary
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	DeletedAt       *time.Time // nil = active, non-nil = soft deleted
 }
 
 type SessionMember struct {
@@ -60,7 +61,7 @@ type Store interface {
 	ListSessions(ctx context.Context, userID string) ([]*Session, error)
 	DeleteSession(ctx context.Context, id string) error
 
-	AppendMessage(ctx context.Context, msg *Message) error
-	AppendMessages(ctx context.Context, msgs []Message) error
-	GetMessages(ctx context.Context, sessionID string) ([]*Message, error)
+	CreateMessage(ctx context.Context, msg *Message) error
+	CreateMessages(ctx context.Context, msgs []Message) error
+	ListMessages(ctx context.Context, sessionID string) ([]*Message, error)
 }

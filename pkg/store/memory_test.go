@@ -72,7 +72,7 @@ func TestDeleteSession(t *testing.T) {
 
 	session := &Session{Title: "to delete"}
 	_ = s.CreateSession(ctx, session)
-	_ = s.AppendMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "hello"})
+	_ = s.CreateMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "hello"})
 
 	if err := s.DeleteSession(ctx, session.ID); err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestDeleteSession(t *testing.T) {
 	}
 
 	// Messages should be gone too.
-	if _, err := s.GetMessages(ctx, session.ID); err == nil {
+	if _, err := s.ListMessages(ctx, session.ID); err == nil {
 		t.Error("messages should be deleted with session")
 	}
 }
@@ -111,11 +111,11 @@ func TestAppendAndGetMessages(t *testing.T) {
 	session := &Session{Title: "chat"}
 	_ = s.CreateSession(ctx, session)
 
-	_ = s.AppendMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "hello"})
-	_ = s.AppendMessage(ctx, &Message{SessionID: session.ID, Role: "assistant", Content: "hi"})
-	_ = s.AppendMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "bye"})
+	_ = s.CreateMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "hello"})
+	_ = s.CreateMessage(ctx, &Message{SessionID: session.ID, Role: "assistant", Content: "hi"})
+	_ = s.CreateMessage(ctx, &Message{SessionID: session.ID, Role: "user", Content: "bye"})
 
-	msgs, err := s.GetMessages(ctx, session.ID)
+	msgs, err := s.ListMessages(ctx, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestAppendAndGetMessages(t *testing.T) {
 // session returns an error.
 func TestAppendMessage_NoSession(t *testing.T) {
 	s := NewMemoryStore()
-	err := s.AppendMessage(context.Background(), &Message{SessionID: "no-such", Role: "user", Content: "hi"})
+	err := s.CreateMessage(context.Background(), &Message{SessionID: "no-such", Role: "user", Content: "hi"})
 	if err == nil {
 		t.Error("expected error for non-existent session")
 	}
@@ -166,11 +166,11 @@ func TestAppendMessages_Batch(t *testing.T) {
 		{SessionID: session.ID, Role: "assistant", Content: "hi"},
 		{SessionID: session.ID, Role: "user", Content: "bye"},
 	}
-	if err := s.AppendMessages(ctx, msgs); err != nil {
+	if err := s.CreateMessages(ctx, msgs); err != nil {
 		t.Fatal(err)
 	}
 
-	got, _ := s.GetMessages(ctx, session.ID)
+	got, _ := s.ListMessages(ctx, session.ID)
 	if len(got) != 3 {
 		t.Fatalf("messages count: got %d, want 3", len(got))
 	}

@@ -88,7 +88,7 @@ func (m *Manager) Reply(ctx context.Context, sessionID string, text string) (str
 	// Persist new messages to the full chat history (single batch write).
 	newMsgs := a.History()[historyBefore:]
 	storeMsgs := providerToStoreMessages(sessionID, newMsgs)
-	if err := m.store.AppendMessages(ctx, storeMsgs); err != nil {
+	if err := m.store.CreateMessages(ctx, storeMsgs); err != nil {
 		return "", fmt.Errorf("failed to persist messages: %w", err)
 	}
 

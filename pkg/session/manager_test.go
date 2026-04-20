@@ -151,7 +151,7 @@ func TestReply_PersistsMessages(t *testing.T) {
 	}
 
 	// Check messages were persisted.
-	msgs, _ := ms.GetMessages(ctx, s.ID)
+	msgs, _ := ms.ListMessages(ctx, s.ID)
 	if len(msgs) != 2 {
 		t.Fatalf("persisted messages: got %d, want 2 (user + assistant)", len(msgs))
 	}
