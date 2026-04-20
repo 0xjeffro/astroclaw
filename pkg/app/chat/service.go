@@ -1,31 +1,28 @@
-package session
-
-// manager.go manages session lifecycle and routes messages to Agent instances.
-// Manager is stateless: it creates a fresh Agent for each Reply call by
-// loading context from Store, and saves context back after Reply completes.
-// This makes it naturally multi-user and cloud-friendly (no in-memory state
-// to lose on restart or share across instances).
+package chat
 
 import (
 	"context"
 	"fmt"
 	"iclaw/pkg/agent"
-
-	"iclaw/pkg/store"
 )
 
-type Manager struct {
-	store       store.Store
-	createAgent func(s *store.Session) *agent.Agent
+// Service manages session lifecycle and routes messages to Agent instances.
+// Manager is stateless: it creates a fresh Agent for each Reply call by
+// loading context from Store, and saves context back after Reply completes.
+// This makes it naturally multi-user and cloud-friendly (no in-memory state
+// to lose on restart or share across instances).
+type Service struct {
+	store       Store
+	createAgent func(s *Session) *agent.Agent
 	configAgent func(a *agent.Agent)
 }
 
-func NewManager(
-	st store.Store,
-	createFn func(s *store.Session) *agent.Agent,
+func NewService(
+	st Store,
+	createFn func(s *Session) *agent.Agent,
 	configFn func(a *agent.Agent),
-) *Manager {
-	return &Manager{
+) *Service {
+	return &Service{
 		store:       st,
 		createAgent: createFn,
 		configAgent: configFn,
@@ -33,8 +30,8 @@ func NewManager(
 }
 
 // NewSession creates a new session record in Store.
-func (m *Manager) NewSession(ctx context.Context, title string) (*store.Session, error) {
-	s := &store.Session{Title: title}
+func (m *Service) NewSession(ctx context.Context, title string) (*Session, error) {
+	s := &Session{Title: title}
 	if err := m.store.CreateSession(ctx, s); err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
@@ -42,24 +39,24 @@ func (m *Manager) NewSession(ctx context.Context, title string) (*store.Session,
 }
 
 // ListSessions returns all sessions from the Store.
-func (m *Manager) ListSessions(ctx context.Context) ([]*store.Session, error) {
+func (m *Service) ListSessions(ctx context.Context) ([]*Session, error) {
 	return m.store.ListSessions(ctx, "")
 }
 
 // GetSession returns a session by ID from the Store.
-func (m *Manager) GetSession(ctx context.Context, id string) (*store.Session, error) {
+func (m *Service) GetSession(ctx context.Context, id string) (*Session, error) {
 	return m.store.GetSession(ctx, id)
 }
 
 // DeleteSession removes a session from Store.
-func (m *Manager) DeleteSession(ctx context.Context, id string) error {
+func (m *Service) DeleteSession(ctx context.Context, id string) error {
 	return m.store.DeleteSession(ctx, id)
 }
 
 // Reply loads a session's context from Store, creates a fresh Agent,
 // processes the message, persists new messages and updated context back
 // to Store, then discards the Agent.
-func (m *Manager) Reply(ctx context.Context, sessionID string, text string) (string, error) {
+func (m *Service) Reply(ctx context.Context, sessionID string, text string) (string, error) {
 	// Load session and create Agent from its context.
 	s, err := m.store.GetSession(ctx, sessionID)
 	if err != nil {

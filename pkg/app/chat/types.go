@@ -1,7 +1,6 @@
-package store
+package chat
 
 import (
-	"context"
 	"errors"
 	"iclaw/pkg/provider"
 	"time"
@@ -52,16 +51,4 @@ type Message struct {
 	ReplyTo        string              // quoted message ID if replying to a specific message, empty otherwise
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-}
-
-type Store interface {
-	CreateSession(ctx context.Context, s *Session) error
-	GetSession(ctx context.Context, id string) (*Session, error)
-	UpdateSession(ctx context.Context, s *Session) error
-	ListSessions(ctx context.Context, userID string) ([]*Session, error)
-	DeleteSession(ctx context.Context, id string) error
-
-	CreateMessage(ctx context.Context, msg *Message) error
-	CreateMessages(ctx context.Context, msgs []Message) error
-	ListMessages(ctx context.Context, sessionID string) ([]*Message, error)
 }

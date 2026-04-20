@@ -1,4 +1,4 @@
-package session
+package chat
 
 // convert.go converts between store.Message and provider.Message.
 // These two types carry the same conversation data but live in different
@@ -9,12 +9,11 @@ package session
 
 import (
 	"iclaw/pkg/provider"
-	"iclaw/pkg/store"
 )
 
 // StoreToProviderMessages converts store messages to provider messages
 // for feeding into Agent. Agent doesn't know about store types.
-func StoreToProviderMessages(msgs []store.Message) []provider.Message {
+func StoreToProviderMessages(msgs []Message) []provider.Message {
 	out := make([]provider.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = provider.Message{
@@ -30,10 +29,10 @@ func StoreToProviderMessages(msgs []store.Message) []provider.Message {
 // providerToStoreMessages converts provider messages to store messages
 // for persisting Agent output back to the database. SessionID is set on
 // each message; SequenceNumber is left at 0 for Store to auto-assign.
-func providerToStoreMessages(sessionID string, msgs []provider.Message) []store.Message {
-	out := make([]store.Message, len(msgs))
+func providerToStoreMessages(sessionID string, msgs []provider.Message) []Message {
+	out := make([]Message, len(msgs))
 	for i, m := range msgs {
-		out[i] = store.Message{
+		out[i] = Message{
 			SessionID:  sessionID,
 			Role:       m.Role,
 			Content:    m.Content,

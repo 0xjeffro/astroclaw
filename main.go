@@ -5,9 +5,8 @@ import (
 	"context"
 	"fmt"
 	"iclaw/pkg/agent"
+	"iclaw/pkg/app/chat"
 	"iclaw/pkg/provider"
-	"iclaw/pkg/session"
-	"iclaw/pkg/store"
 	"iclaw/pkg/tool"
 	"log"
 	"os"
@@ -38,10 +37,10 @@ func main() {
 		"Only respond with plain text, do not use LaTeX or markdown formatting."
 
 	// createAgent builds a fresh Agent from a session's saved context.
-	createFn := func(s *store.Session) *agent.Agent {
+	createFn := func(s *chat.Session) *agent.Agent {
 		return agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
-			session.StoreToProviderMessages(s.ContextMessages), s.ContextSummary,
+			chat.StoreToProviderMessages(s.ContextMessages), s.ContextSummary,
 		)
 	}
 
@@ -62,23 +61,21 @@ func main() {
 		}
 	}
 
-	var st store.Store
-	if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
-		pgStore, err := store.NewPostgresStore(connStr)
-		if err != nil {
-			log.Fatalf("connect to database: %v", err)
-		}
-		defer func() { _ = pgStore.Close() }()
-		st = pgStore
-	} else {
-		st = store.NewMemoryStore()
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		log.Fatal("DATABASE_URL must be set")
 	}
+	pgStore, err := chat.NewPostgresStore(connStr)
+	if err != nil {
+		log.Fatalf("connect to database: %v", err)
+	}
+	defer func() { _ = pgStore.Close() }()
 
-	mgr := session.NewManager(st, createFn, configFn)
+	svc := chat.NewService(pgStore, createFn, configFn)
 	ctx := context.Background()
 
 	// Create a default session on startup.
-	defaultSession, err := mgr.NewSession(ctx, "default")
+	defaultSession, err := svc.NewSession(ctx, "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,7 +96,7 @@ func main() {
 			fmt.Println()
 			return
 		case input == "/sessions":
-			sessions, _ := mgr.ListSessions(ctx)
+			sessions, _ := svc.ListSessions(ctx)
 			for _, s := range sessions {
 				marker := "  "
 				if s.ID == currentSession {
@@ -112,7 +109,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := mgr.NewSession(ctx, title)
+			s, err := svc.NewSession(ctx, title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
@@ -122,7 +119,7 @@ func main() {
 		case strings.HasPrefix(input, "/switch "):
 			id := strings.TrimSpace(strings.TrimPrefix(input, "/switch "))
 			// Verify session exists.
-			if _, err := mgr.GetSession(ctx, id); err != nil {
+			if _, err := svc.GetSession(ctx, id); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
@@ -134,7 +131,7 @@ func main() {
 				_, _ = fmt.Fprintln(os.Stderr, "error: cannot delete the active session")
 				continue
 			}
-			if err := mgr.DeleteSession(ctx, id); err != nil {
+			if err := svc.DeleteSession(ctx, id); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
@@ -142,7 +139,7 @@ func main() {
 		case input == "":
 			continue
 		default:
-			reply, err := mgr.Reply(ctx, currentSession, input)
+			reply, err := svc.Reply(ctx, currentSession, input)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
