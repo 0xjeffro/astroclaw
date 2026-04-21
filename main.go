@@ -11,6 +11,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -40,7 +42,7 @@ func main() {
 	createFn := func(s *chat.Session) *agent.Agent {
 		return agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
-			chat.StoreToProviderMessages(s.ContextMessages), s.ContextSummary,
+			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
 		)
 	}
 
@@ -65,13 +67,13 @@ func main() {
 	if connStr == "" {
 		log.Fatal("DATABASE_URL must be set")
 	}
-	pgStore, err := chat.NewPostgresStore(connStr)
+	pool, err := pgxpool.New(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
-	defer func() { _ = pgStore.Close() }()
+	defer pool.Close()
 
-	svc := chat.NewService(pgStore, createFn, configFn)
+	svc := chat.NewService(pool, createFn, configFn)
 	ctx := context.Background()
 
 	// Create a default session on startup.
@@ -131,7 +133,7 @@ func main() {
 				_, _ = fmt.Fprintln(os.Stderr, "error: cannot delete the active session")
 				continue
 			}
-			if err := svc.DeleteSession(ctx, id); err != nil {
+			if err := svc.SoftDeleteSession(ctx, id); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}

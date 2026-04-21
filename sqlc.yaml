@@ -1,0 +1,28 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "pkg/app/chat/db/queries.sql"
+    schema: "pkg/app/chat/db/schema.sql"
+    gen:
+      go:
+        package: "db"
+        out: "pkg/app/chat/db"
+        sql_package: "pgx/v5"
+        overrides:
+          - db_type: "uuid"
+            go_type: "string"
+            nullable: false
+          - db_type: "uuid"
+            go_type:
+              type: "string"
+              pointer: true
+            nullable: true
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+            nullable: false
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true

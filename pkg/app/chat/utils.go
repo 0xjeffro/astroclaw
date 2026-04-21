@@ -8,12 +8,13 @@ package chat
 // Agent and save from Agent back to Store.
 
 import (
+	"encoding/json"
 	"iclaw/pkg/provider"
 )
 
-// StoreToProviderMessages converts store messages to provider messages
+// ToProviderMessages converts store messages to provider messages
 // for feeding into Agent. Agent doesn't know about store types.
-func StoreToProviderMessages(msgs []Message) []provider.Message {
+func ToProviderMessages(msgs []Message) []provider.Message {
 	out := make([]provider.Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = provider.Message{
@@ -26,10 +27,10 @@ func StoreToProviderMessages(msgs []Message) []provider.Message {
 	return out
 }
 
-// providerToStoreMessages converts provider messages to store messages
+// providerToChatMessages converts provider messages to chat messages
 // for persisting Agent output back to the database. SessionID is set on
 // each message; SequenceNumber is left at 0 for Store to auto-assign.
-func providerToStoreMessages(sessionID string, msgs []provider.Message) []Message {
+func providerToChatMessages(sessionID string, msgs []provider.Message) []Message {
 	out := make([]Message, len(msgs))
 	for i, m := range msgs {
 		out[i] = Message{
@@ -41,4 +42,12 @@ func providerToStoreMessages(sessionID string, msgs []provider.Message) []Messag
 		}
 	}
 	return out
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte("[]")
+	}
+	return b
 }

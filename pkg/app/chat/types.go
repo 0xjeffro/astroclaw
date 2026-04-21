@@ -1,9 +1,13 @@
 package chat
 
 import (
+	"encoding/json"
 	"errors"
-	"iclaw/pkg/provider"
+	"fmt"
 	"time"
+
+	"iclaw/pkg/app/chat/db"
+	"iclaw/pkg/provider"
 )
 
 var (
@@ -30,6 +34,29 @@ type Session struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time // nil = active, non-nil = soft deleted
+}
+
+// SessionFromDB constructs a chat.Session from a db.Session.
+func SessionFromDB(s db.Session) (*Session, error) {
+	var contextMsgs []Message
+	if len(s.ContextMessages) > 0 {
+		if err := json.Unmarshal(s.ContextMessages, &contextMsgs); err != nil {
+			return nil, fmt.Errorf("unmarshal context messages: %w", err)
+		}
+	}
+	return &Session{
+		ID:              s.ID,
+		UserID:          s.UserID,
+		Title:           s.Title,
+		Model:           s.Model,
+		SystemPrompt:    s.SystemPrompt,
+		ContextWindow:   int(s.ContextWindow),
+		ContextMessages: contextMsgs,
+		ContextSummary:  s.ContextSummary,
+		CreatedAt:       s.CreatedAt,
+		UpdatedAt:       s.UpdatedAt,
+		DeletedAt:       s.DeletedAt,
+	}, nil
 }
 
 type SessionMember struct {
