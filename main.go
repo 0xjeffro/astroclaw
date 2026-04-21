@@ -10,9 +10,12 @@ import (
 	"iclaw/pkg/tool"
 	"log"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 func main() {
@@ -63,21 +66,55 @@ func main() {
 		}
 	}
 
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		log.Fatal("DATABASE_URL must be set")
+	ctx := context.Background()
+	var pool *pgxpool.Pool
+
+	if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
+		var err error
+		pool, err = pgxpool.New(ctx, connStr)
+		if err != nil {
+			log.Fatalf("connect to database: %v", err)
+		}
+		defer pool.Close()
+	} else {
+		// Local dev: auto-start a temporary PostgreSQL container.
+		// Data is lost when the process exits.
+		fmt.Println("DATABASE_URL not set, starting temporary PostgreSQL container...")
+		migrationFiles, _ := filepath.Glob("migrations/*.sql")
+		sort.Strings(migrationFiles)
+		if len(migrationFiles) == 0 {
+			log.Fatal("no migration files found in migrations/")
+		}
+		pg, err := postgres.Run(ctx, "postgres:16",
+			postgres.WithDatabase("iclaw"),
+			postgres.WithUsername("iclaw"),
+			postgres.WithPassword("iclaw"),
+			postgres.WithInitScripts(migrationFiles...),
+			postgres.BasicWaitStrategies(),
+			postgres.WithSQLDriver("pgx"),
+		)
+		if err != nil {
+			log.Fatalf("start PostgreSQL container: %v", err)
+		}
+		defer func() {
+			if pg != nil {
+				_ = pg.Terminate(ctx)
+			}
+		}()
+
+		connStr, _ := pg.ConnectionString(ctx, "sslmode=disable")
+		pool, err = pgxpool.New(ctx, connStr)
+		if err != nil {
+			log.Fatalf("connect to container database: %v", err)
+		}
+		defer pool.Close()
+		fmt.Println("PostgreSQL container ready.")
 	}
-	pool, err := pgxpool.New(context.Background(), connStr)
-	if err != nil {
-		log.Fatalf("connect to database: %v", err)
-	}
-	defer pool.Close()
 
 	svc := chat.NewService(pool, createFn, configFn)
-	ctx := context.Background()
 
 	// Create a default session on startup.
-	defaultSession, err := svc.NewSession(ctx, "default-user", "default")
+	defaultSession, err := svc.NewSession(ctx, "00000000-0000-0000-0000-000000000000", "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,7 +148,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := svc.NewSession(ctx, "default-user", title)
+			s, err := svc.NewSession(ctx, "00000000-0000-0000-0000-000000000000", title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
