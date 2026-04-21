@@ -77,7 +77,7 @@ func main() {
 	ctx := context.Background()
 
 	// Create a default session on startup.
-	defaultSession, err := svc.NewSession(ctx, "default")
+	defaultSession, err := svc.NewSession(ctx, "default-user", "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := svc.NewSession(ctx, title)
+			s, err := svc.NewSession(ctx, "default-user", title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue

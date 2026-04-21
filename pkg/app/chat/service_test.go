@@ -3,7 +3,10 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -11,14 +14,71 @@ import (
 	"iclaw/pkg/provider"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
+
+// testPool is shared across all tests in this package.
+// Created once in TestMain, destroyed after all tests finish.
+var testPool *pgxpool.Pool
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	// Find migration files (same SQL that runs in production).
+	migrationFiles, _ := filepath.Glob("../../../migrations/*.sql")
+	sort.Strings(migrationFiles)
+	if len(migrationFiles) == 0 {
+		panic("no migration files found in ../../../migrations/*.sql")
+	}
+	fmt.Printf("TestMain: found %d migration files: %v\n", len(migrationFiles), migrationFiles)
+
+	// Start a PostgreSQL container with production migrations applied.
+	pg, err := postgres.Run(ctx, "postgres:16",
+		postgres.WithDatabase("iclaw_test"),
+		postgres.WithUsername("test"),
+		postgres.WithPassword("test"),
+		postgres.WithInitScripts(migrationFiles...),
+		// BasicWaitStrategies makes testcontainers wait until PostgreSQL is
+		// fully ready to accept queries (not just "container started").
+		// Without it, tests may connect before init scripts finish running.
+		postgres.BasicWaitStrategies(),
+		// WithSQLDriver tells the health check to use pgx (our database driver)
+		// instead of the default lib/pq. This avoids pulling in a second
+		// PostgreSQL driver just for health checks.
+		postgres.WithSQLDriver("pgx"),
+	)
+	if err != nil {
+		// If Docker is not available, fall back to DATABASE_URL.
+		if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
+			testPool, _ = pgxpool.New(ctx, connStr)
+			code := m.Run()
+			testPool.Close()
+			os.Exit(code)
+		}
+		panic("cannot start test database: " + err.Error())
+	}
+
+	connStr, _ := pg.ConnectionString(ctx, "sslmode=disable")
+	testPool, err = pgxpool.New(ctx, connStr)
+	if err != nil {
+		panic("connect to test database: " + err.Error())
+	}
+
+	code := m.Run()
+
+	testPool.Close()
+	if pg != nil {
+		_ = pg.Terminate(ctx)
+	}
+	os.Exit(code)
+}
 
 // fakeProvider for testing. Returns scripted responses in order and
 // records the messages it received on the most recent call.
 type fakeProvider struct {
 	responses []provider.Message
 	calls     int
-	gotMsgs   []provider.Message // msgs from the most recent Chat call
+	gotMsgs   []provider.Message
 }
 
 func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message, _ []provider.Tool) (provider.Message, error) {
@@ -31,24 +91,16 @@ func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message, _ []prov
 	return r, nil
 }
 
-// setupService creates a Service with a real PostgreSQL for testing.
-// Requires DATABASE_URL environment variable.
+const testUserID = "00000000-0000-0000-0000-000000000001"
+
+// setupService creates a Service for testing using the shared testPool.
+// Cleans up data before each test to ensure isolation.
 func setupService(t *testing.T, responses []provider.Message) (*Service, *fakeProvider) {
 	t.Helper()
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		t.Skip("DATABASE_URL not set")
-	}
 
-	pool, err := pgxpool.New(context.Background(), connStr)
-	if err != nil {
-		t.Fatalf("connect to database: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-
-	// Clean up test data before each test.
-	pool.Exec(context.Background(), "DELETE FROM messages")
-	pool.Exec(context.Background(), "UPDATE sessions SET deleted_at = now()")
+	// Clean up data from previous tests.
+	_, _ = testPool.Exec(context.Background(), "DELETE FROM messages")
+	_, _ = testPool.Exec(context.Background(), "DELETE FROM sessions")
 
 	fp := &fakeProvider{responses: responses}
 
@@ -59,7 +111,7 @@ func setupService(t *testing.T, responses []provider.Message) (*Service, *fakePr
 		)
 	}
 
-	svc := NewService(pool, createFn, nil)
+	svc := NewService(testPool, createFn, nil)
 	return svc, fp
 }
 
@@ -71,7 +123,10 @@ func TestReply_PersistsMessages(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, _ := svc.NewSession(ctx, "chat")
+	s, err := svc.NewSession(ctx, testUserID, "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
 	reply, err := svc.Reply(ctx, s.ID, "hello")
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +145,10 @@ func TestReply_SavesContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, _ := svc.NewSession(ctx, "chat")
+	s, err := svc.NewSession(ctx, testUserID, "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, _ = svc.Reply(ctx, s.ID, "msg 1")
 	_, _ = svc.Reply(ctx, s.ID, "msg 2")
 
@@ -112,11 +170,12 @@ func TestReply_RestoresContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	// First round: establish context.
-	s, _ := svc.NewSession(ctx, "restored")
+	s, err := svc.NewSession(ctx, testUserID, "restored")
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, _ = svc.Reply(ctx, s.ID, "my name is Jeffro")
 
-	// Second round: verify context was restored (Agent sees prior conversation).
 	reply, err := svc.Reply(ctx, s.ID, "do you remember me?")
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +184,6 @@ func TestReply_RestoresContext(t *testing.T) {
 		t.Errorf("reply: got %q", reply)
 	}
 
-	// Verify fakeProvider received the restored context.
 	if fp.calls != 2 {
 		t.Fatalf("expected 2 Chat calls, got %d", fp.calls)
 	}

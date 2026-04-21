@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Service manages session lifecycle and routes messages to Agent instances.
+// Service manages the session lifecycle and routes messages to Agent instances.
 // It's stateless: creates a fresh Agent for each Reply call by loading
 // context from the database and saves context back after Reply completes.
 type Service struct {
@@ -34,9 +34,10 @@ func NewService(
 	}
 }
 
-func (svc *Service) NewSession(ctx context.Context, title string) (*Session, error) {
+func (svc *Service) NewSession(ctx context.Context, userID string, title string) (*Session, error) {
 	s, err := svc.queries.CreateSession(ctx, db.CreateSessionParams{
 		Title:           title,
+		UserID:          userID,
 		ContextMessages: []byte("[]"),
 	})
 	if err != nil {
