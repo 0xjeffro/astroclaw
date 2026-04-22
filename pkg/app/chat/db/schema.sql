@@ -1,4 +1,12 @@
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- This schema is designed for Aurora DSQL compatibility.
+-- DSQL offers true serverless pricing (pay-per-request, scale to zero)
+-- and zero cold-start latency, but does not support:
+--   - JSONB column types (use TEXT, cast to JSONB at query time)
+--   - Extensions (pgcrypto, pgvector, etc.; gen_random_uuid() is built-in)
+--   - Foreign key constraints
+--   - Triggers
+--   - PL/pgSQL (SQL-language functions only)
+--   - Multiple DDL statements per transaction
 
 CREATE TABLE users (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,7 +23,7 @@ CREATE TABLE sessions (
     model            TEXT NOT NULL DEFAULT '',
     system_prompt    TEXT NOT NULL DEFAULT '',
     context_window   INT NOT NULL DEFAULT 0,
-    context_messages JSONB NOT NULL DEFAULT '[]',
+    context_messages TEXT NOT NULL DEFAULT '[]',
     context_summary  TEXT NOT NULL DEFAULT '',
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -35,7 +43,7 @@ CREATE TABLE messages (
     session_id         UUID NOT NULL,
     role               TEXT NOT NULL,
     content            TEXT NOT NULL DEFAULT '',
-    tool_calls         JSONB,
+    tool_calls         TEXT,
     tool_call_id       TEXT NOT NULL DEFAULT '',
     sequence_number    INT NOT NULL,
     forwarded_from     UUID,

@@ -29,7 +29,7 @@ type Session struct {
 	Model           string
 	SystemPrompt    string
 	ContextWindow   int
-	ContextMessages []Message // Agent's compressed working context (JSONB in PostgreSQL)
+	ContextMessages []Message // Agent's compressed working context (TEXT in PostgreSQL)
 	ContextSummary  string    // Agent's conversation summary
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -40,7 +40,7 @@ type Session struct {
 func SessionFromDB(s db.Session) (*Session, error) {
 	var contextMsgs []Message
 	if len(s.ContextMessages) > 0 {
-		if err := json.Unmarshal(s.ContextMessages, &contextMsgs); err != nil {
+		if err := json.Unmarshal([]byte(s.ContextMessages), &contextMsgs); err != nil {
 			return nil, fmt.Errorf("unmarshal context messages: %w", err)
 		}
 	}

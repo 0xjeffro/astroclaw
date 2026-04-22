@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createMessage = `-- name: CreateMessage :one
@@ -19,7 +21,7 @@ type CreateMessageParams struct {
 	SessionID      string
 	Role           string
 	Content        string
-	ToolCalls      []byte
+	ToolCalls      pgtype.Text
 	ToolCallID     string
 	SequenceNumber int32
 	ForwardedFrom  *string
@@ -66,7 +68,7 @@ type CreateSessionParams struct {
 	Model           string
 	SystemPrompt    string
 	ContextWindow   int32
-	ContextMessages []byte
+	ContextMessages string
 	ContextSummary  string
 }
 
@@ -249,7 +251,7 @@ type UpdateSessionParams struct {
 	Model           string
 	SystemPrompt    string
 	ContextWindow   int32
-	ContextMessages []byte
+	ContextMessages string
 	ContextSummary  string
 	ID              string
 }

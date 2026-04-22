@@ -8,6 +8,7 @@ import (
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat/db"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -38,7 +39,7 @@ func (svc *Service) NewSession(ctx context.Context, userID string, title string)
 	s, err := svc.queries.CreateSession(ctx, db.CreateSessionParams{
 		Title:           title,
 		UserID:          userID,
-		ContextMessages: []byte("[]"),
+		ContextMessages: "[]",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
@@ -119,7 +120,7 @@ func (svc *Service) Reply(ctx context.Context, sessionID string, text string) (s
 			SessionID:      sessionID,
 			Role:           msg.Role,
 			Content:        msg.Content,
-			ToolCalls:      mustJSON(msg.ToolCalls),
+			ToolCalls:      pgtype.Text{String: string(mustJSON(msg.ToolCalls)), Valid: true},
 			ToolCallID:     msg.ToolCallID,
 			SequenceNumber: int32(historyBefore + i + 1),
 		})
@@ -136,7 +137,7 @@ func (svc *Service) Reply(ctx context.Context, sessionID string, text string) (s
 		Model:           s.Model,
 		SystemPrompt:    s.SystemPrompt,
 		ContextWindow:   int32(s.ContextWindow),
-		ContextMessages: contextJSON,
+		ContextMessages: string(contextJSON),
 		ContextSummary:  a.Summary(),
 		ID:              sessionID,
 	})

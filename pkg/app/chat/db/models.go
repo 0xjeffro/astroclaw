@@ -6,6 +6,8 @@ package db
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Message struct {
@@ -13,7 +15,7 @@ type Message struct {
 	SessionID      string
 	Role           string
 	Content        string
-	ToolCalls      []byte
+	ToolCalls      pgtype.Text
 	ToolCallID     string
 	SequenceNumber int32
 	ForwardedFrom  *string
@@ -29,7 +31,7 @@ type Session struct {
 	Model           string
 	SystemPrompt    string
 	ContextWindow   int32
-	ContextMessages []byte
+	ContextMessages string
 	ContextSummary  string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

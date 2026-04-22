@@ -27,6 +27,13 @@ DATABASE_URL="postgres://user:pass@localhost:5432/iclaw" \
 ANTHROPIC_API_KEY=sk-ant-xxx go run .
 ```
 
+## Database
+
+CDK deployment currently defaults to Aurora DSQL. A future release will add a configuration option to choose between DSQL and Aurora PostgreSQL.
+
+- **DSQL**: Lower cost (true serverless pay-per-request, scale to zero). Best for most workloads.
+- **Aurora PostgreSQL**: Full PostgreSQL feature set (JSONB columns, foreign keys, extensions). Choose this if you need vector search (pgvector) or other advanced query capabilities.
+
 ## Development
 
 ### Generate code after schema/query changes
