@@ -36,6 +36,10 @@ CDK deployment currently defaults to Aurora DSQL. A future release will add a co
 
 ## Development
 
+### AWS Tools
+- [Installing or updating to the latest version of the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html)
+
 ### Generate code after schema/query changes
 
 ```bash
