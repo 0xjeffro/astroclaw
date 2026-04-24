@@ -151,5 +151,10 @@ export class InfraStack extends cdk.Stack {
       methods: [apigwv2.HttpMethod.ANY],
       integration: lambdaIntegration,
     });
+
+    new cdk.CfnOutput(this, 'ApiUrl', {
+      value: api.url!,
+      description: 'API Gateway endpoint',
+    });
   }
 }
