@@ -3,6 +3,8 @@ import { Construct } from 'constructs';
 import * as dsql from 'aws-cdk-lib/aws-dsql';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cr from 'aws-cdk-lib/custom-resources';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { execSync } from 'child_process';
 import * as path from 'path';
@@ -130,6 +132,24 @@ export class InfraStack extends cdk.Stack {
         // Changing this value triggers the migrate Lambda on each deployment.
         version: Date.now().toString(),
       },
+    });
+
+    // HTTP API Gateway routes all requests to the API Lambda.
+    // The Lambda's handler() function does the actual path/method routing.
+    // https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_apigatewayv2.HttpApi.html
+    const api = new apigwv2.HttpApi(this, 'HttpApi', {
+      apiName: 'iclaw-api',
+    });
+
+    const lambdaIntegration = new integrations.HttpLambdaIntegration(
+      'LambdaIntegration', apiHandler,
+    );
+
+    // /{proxy+} is a catch-all route that forwards every path to the Lambda.
+    api.addRoutes({
+      path: '/{proxy+}',
+      methods: [apigwv2.HttpMethod.ANY],
+      integration: lambdaIntegration,
     });
   }
 }
