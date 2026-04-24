@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib/core';
 import { Construct } from 'constructs';
 import * as dsql from 'aws-cdk-lib/aws-dsql';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { execSync } from 'child_process';
 import * as path from 'path';
@@ -49,7 +50,7 @@ export class InfraStack extends cdk.Stack {
           },
 
           //DockerBuildOptions Doc: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.DockerBuildOptions.html
-          image: cdk.DockerImage.fromRegistry('golang:1.22'),
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
           command: [
             'bash', '-c',
             'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/api',
@@ -88,7 +89,7 @@ export class InfraStack extends cdk.Stack {
               }
             },
           },
-          image: cdk.DockerImage.fromRegistry('golang:1.22'),
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
           command: [
             'bash', '-c',
             'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/migrate && cp -r migrations /asset-output/migrations',
@@ -116,5 +117,19 @@ export class InfraStack extends cdk.Stack {
       actions: ['dsql:DbConnectAdmin'],
       resources: [cluster.attrResourceArn],
     }));
+
+    // Run database migrations on every deployment via CloudFormation Custom Resource.
+    // https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.custom_resources.Provider.html
+    const migrateProvider = new cr.Provider(this, 'MigrateProvider', {
+      onEventHandler: migrateHandler,
+    });
+
+    new cdk.CustomResource(this, 'RunMigrations', {
+      serviceToken: migrateProvider.serviceToken,
+      properties: {
+        // Changing this value triggers the migrate Lambda on each deployment.
+        version: Date.now().toString(),
+      },
+    });
   }
 }
