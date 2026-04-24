@@ -1,10 +1,10 @@
 import * as cdk from 'aws-cdk-lib/core';
 import { Construct } from 'constructs';
 import * as dsql from 'aws-cdk-lib/aws-dsql';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { execSync } from 'child_process';
 import * as path from 'path';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 const projectRoot = path.join(__dirname, '..', '..', '..', '..');
 
@@ -101,5 +101,20 @@ export class InfraStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
     });
+
+    // IAM permissions for DSQL access.
+    // https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonauroradsql.html
+
+    // API Lambda: read/write data only, no schema changes.
+    apiHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnect'],
+      resources: [cluster.attrResourceArn],
+    }));
+
+    // Migrate Lambda: needs DDL access for CREATE TABLE, ALTER TABLE, etc.
+    migrateHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
   }
 }
