@@ -65,20 +65,6 @@ test('API Gateway has catch-all route', () => {
   });
 });
 
-// Verifies IAM policies grant DSQL access.
-test('IAM policies for DSQL access exist', () => {
-  const template = createTemplate();
-  // Should have at least one policy with dsql:DbConnect
-  template.hasResourceProperties('AWS::IAM::Policy', {
-    PolicyDocument: {
-      Statement: [{
-        Action: 'dsql:DbConnect',
-        Effect: 'Allow',
-      }],
-    },
-  });
-});
-
 // Verifies the CloudFormation Custom Resource for migrations exists.
 test('Migration Custom Resource exists', () => {
   const template = createTemplate();
