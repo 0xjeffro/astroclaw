@@ -18,7 +18,10 @@ import (
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
-var svc *chat.Service
+var (
+	svc    *chat.Service
+	apiKey string // read from credentials table, used to authenticate requests
+)
 
 // init runs once when Lambda cold-starts. Connects to DSQL via IAM
 // authentication, sets up LLM provider and chat service.
@@ -36,18 +39,28 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	// LLM Provider: read API key from credentials table.
+	// Read credentials from the database.
 	pwSvc := passwords.NewService(pool)
-	cred, err := pwSvc.GetCredentialByName(ctx, "anthropic-api-key")
+
+	// LLM API key.
+	llmCred, err := pwSvc.GetCredentialByName(ctx, "anthropic-api-key")
 	if err != nil {
 		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
+	}
+
+	// API authentication key.
+	apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
+	if err != nil {
+		log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
+	} else {
+		apiKey = apiKeyCred.Value
 	}
 	var p provider.Provider
 	model := os.Getenv("MODEL_NAME")
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
-	p = provider.NewAnthropic(cred.Value, model)
+	p = provider.NewAnthropic(llmCred.Value, model)
 
 	registry := tool.NewRegistry()
 	registry.Register(tool.GetCurrentTime)
@@ -75,6 +88,11 @@ func init() {
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	// Authenticate if API key is configured.
+	if apiKey != "" && req.Headers["x-api-key"] != apiKey {
+		return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
 	path := req.RequestContext.HTTP.Path
 	method := req.RequestContext.HTTP.Method
 

@@ -7,6 +7,7 @@ import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { execSync } from 'child_process';
+import * as crypto from 'crypto';
 import * as path from 'path';
 
 const projectRoot = path.join(__dirname, '..', '..', '..', '..');
@@ -21,6 +22,24 @@ export class InfraStack extends cdk.Stack {
       default: '',
       noEcho: true,
       description: 'Anthropic API key.',
+    });
+
+    // API authentication key. When GenerateApiKey=true, a random key is
+    // generated at synth time, passed to migrate Lambda to seed into
+    // credentials table, and printed in the stack output.
+    // Default is false so subsequent deploys don't overwrite existing keys.
+    const generateApiKey = new cdk.CfnParameter(this, 'GenerateApiKey', {
+      type: 'String',
+      default: 'false',
+      allowedValues: ['true', 'false'],
+      description: 'Generate a new API key for authentication. Only set to true on first deploy or to rotate.',
+    });
+
+    const generatedApiKey = crypto.randomUUID();
+
+    // CDK CfnCondition docs: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.CfnCondition.html
+    const shouldGenerateApiKey = new cdk.CfnCondition(this, 'ShouldGenerateApiKey', {
+      expression: cdk.Fn.conditionEquals(generateApiKey.valueAsString, 'true'),
     });
 
     // CDK DSQL Doc: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dsql.CfnCluster.html
@@ -109,6 +128,9 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
         ANTHROPIC_API_KEY: anthropicApiKey.valueAsString,
+        GENERATED_API_KEY: cdk.Fn.conditionIf(
+          'ShouldGenerateApiKey', generatedApiKey, '',
+        ).toString(),
       },
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
@@ -165,6 +187,12 @@ export class InfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url!,
       description: 'API Gateway endpoint',
+    });
+
+    new cdk.CfnOutput(this, 'GeneratedApiKey', {
+      value: generatedApiKey,
+      description: 'API key for authentication',
+      condition: shouldGenerateApiKey
     });
   }
 }
