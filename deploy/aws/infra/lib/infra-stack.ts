@@ -191,7 +191,7 @@ export class InfraStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'GeneratedApiKey', {
       value: generatedApiKey,
-      description: 'API key for authentication',
+      description: 'SAVE THIS NOW. Use it in the x-api-key header for all API requests.',
       condition: shouldGenerateApiKey
     });
   }

@@ -38,7 +38,7 @@ exports[`snapshot 1`] = `
     },
     "GeneratedApiKey": {
       "Condition": "ShouldGenerateApiKey",
-      "Description": "API key for authentication",
+      "Description": "SAVE THIS NOW. Use it in the x-api-key header for all API requests.",
       "Value": "00000000-0000-0000-0000-000000000000",
     },
   },
