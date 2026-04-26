@@ -1,10 +1,10 @@
-package password
+package passwords
 
 import (
 	"errors"
 	"time"
 
-	"iclaw/pkg/app/password/db"
+	"iclaw/pkg/app/passwords/db"
 )
 
 var (
@@ -21,7 +21,7 @@ type Credential struct {
 	DeletedAt   *time.Time
 }
 
-// CredentialFromDB constructs a password.Credential from a db.Credential.
+// CredentialFromDB constructs a passwords.Credential from a db.Credential.
 func CredentialFromDB(c db.Credential) *Credential {
 	return &Credential{
 		ID:          c.ID,

@@ -1,10 +1,10 @@
-package password
+package passwords
 
 import (
 	"context"
 	"fmt"
 
-	"iclaw/pkg/app/password/db"
+	"iclaw/pkg/app/passwords/db"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
