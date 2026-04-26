@@ -108,9 +108,10 @@ export class InfraStack extends cdk.Stack {
     // IAM permissions for DSQL access.
     // https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonauroradsql.html
 
-    // API Lambda: read/write data only, no schema changes.
+    // API Lambda: using DbConnectAdmin for now. Switch to DbConnect with a
+    // restricted database role when fine-grained table access control is needed.
     apiHandler.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['dsql:DbConnect'],
+      actions: ['dsql:DbConnectAdmin'],
       resources: [cluster.attrResourceArn],
     }));
 

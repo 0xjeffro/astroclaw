@@ -34,6 +34,23 @@ CDK deployment currently defaults to Aurora DSQL. A future release will add a co
 - **DSQL**: Lower cost (true serverless pay-per-request, scale to zero). Best for most workloads.
 - **Aurora PostgreSQL**: Full PostgreSQL feature set (JSONB columns, foreign keys, extensions). Choose this if you need vector search (pgvector) or other advanced query capabilities.
 
+## App Permission Model
+
+Apps are divided into two categories with different security boundaries:
+
+**System Apps** (e.g. Chat, Calendar, Task)
+- Maintained by the project maintainers.
+- Share a single Lambda and database connection.
+- Access control is enforced at the code level: each App only imports its own `db.Queries` package.
+- Use `DbConnectAdmin` (full database access) since the code is trusted.
+
+**Third-party Apps** (future)
+- Developed by external contributors.
+- Each third-party App runs in its own Lambda with a dedicated database Role, restricted to only the tables it creates/owns.
+- IAM permission: `dsql:DbConnect` (not Admin).
+- Database role mapping via `GRANT CONNECT TO '<lambda-role-arn>' WITH <app_role>`.
+- More details are yet to be planned and discussed.
+
 ## Development
 
 ### AWS Tools
