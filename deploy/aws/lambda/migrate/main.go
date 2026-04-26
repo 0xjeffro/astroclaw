@@ -67,7 +67,7 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	}
 	defer pool.Close()
 
-	if err := runMigrations(ctx, pool); err != nil {
+	if err := runMigrations(ctx, pool, true); err != nil {
 		return nil, err
 	}
 
@@ -86,7 +86,7 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 //
 // DSQL requires one DDL statement per transaction, so each statement runs
 // independently outside a transaction.
-func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+func runMigrations(ctx context.Context, pool *pgxpool.Pool, dsqlMode bool) error {
 	// Create the tracking table if it doesn't exist.
 	// This is safe to run on every invocation.
 
@@ -138,6 +138,14 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 			if applied {
 				log.Printf("skip %s[%d] (already applied)", filename, i)
 				continue
+			}
+
+			// DSQL requires CREATE INDEX ASYNC instead of CREATE INDEX.
+			// Replace at runtime so migration files stay compatible with
+			// standard PostgreSQL.
+			// https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html
+			if dsqlMode {
+				stmt = strings.Replace(stmt, "CREATE INDEX ", "CREATE INDEX ASYNC ", 1)
 			}
 
 			// Execute the statement. If it fails with "already exists"

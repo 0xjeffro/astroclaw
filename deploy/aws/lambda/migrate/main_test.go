@@ -84,7 +84,7 @@ func TestMain(m *testing.M) {
 		panic("chdir to project root: " + err.Error())
 	}
 
-	if err := runMigrations(ctx, migratedPool); err != nil {
+	if err := runMigrations(ctx, migratedPool, false); err != nil {
 		panic("runMigrations: " + err.Error())
 	}
 
@@ -329,7 +329,7 @@ func TestRunMigrations_SecondRun(t *testing.T) {
 	}()
 
 	// Second run should succeed with no errors.
-	if err := runMigrations(ctx, migratedPool); err != nil {
+	if err := runMigrations(ctx, migratedPool, false); err != nil {
 		t.Fatalf("second runMigrations failed: %v", err)
 	}
 }
