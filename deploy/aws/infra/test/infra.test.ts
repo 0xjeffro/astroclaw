@@ -1,6 +1,10 @@
 import * as cdk from 'aws-cdk-lib/core';
+import * as crypto from 'crypto';
 import { Template } from 'aws-cdk-lib/assertions';
 import { InfraStack } from '../lib/infra-stack';
+
+// Fix crypto.randomUUID to a constant so snapshot tests are deterministic.
+jest.spyOn(crypto, 'randomUUID').mockReturnValue('00000000-0000-0000-0000-000000000000');
 
 function createTemplate(): Template {
   const app = new cdk.App();
