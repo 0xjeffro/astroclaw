@@ -48,6 +48,8 @@ func init() {
 	registry.Register(tool.GetCurrentTime)
 	registry.Register(tool.EvalArithmetic)
 	registry.Register(tool.ReadFile)
+	// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
+	// use ExecCommand to access DSQL credentials and compromise the database.
 	registry.Register(tool.ExecCommand)
 	registry.Register(tool.WriteFile)
 	registry.Register(tool.EditFile)
