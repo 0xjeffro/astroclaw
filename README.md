@@ -145,3 +145,16 @@ go test -count=1 $(go list ./... 2>/dev/null | grep -v infra)
 `-count=1` disables test caching. `grep -v infra` excludes the CDK directory which contains Go template files in `node_modules` that break `go test`.
 
 Tests auto-start a PostgreSQL container via testcontainers. No manual setup needed.
+
+### CDK tests
+
+```bash
+cd deploy/aws/infra
+npx jest
+```
+
+If you changed the CDK stack, the snapshot test will fail. Review the diff, then update the snapshot:
+
+```bash
+npx jest --updateSnapshot
+```
