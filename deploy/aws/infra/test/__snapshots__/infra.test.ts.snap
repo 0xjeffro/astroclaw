@@ -28,6 +28,12 @@ exports[`snapshot 1`] = `
     },
   },
   "Parameters": {
+    "AnthropicApiKey": {
+      "Default": "",
+      "Description": "Anthropic API key.",
+      "NoEcho": true,
+      "Type": "String",
+    },
     "BootstrapVersion": {
       "Default": "/cdk-bootstrap/hnb659fds/version",
       "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
@@ -48,7 +54,7 @@ exports[`snapshot 1`] = `
           "S3Bucket": {
             "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
           },
-          "S3Key": "a2aa83fda8d575b3d573693e851bd7dc938091a621c572c631726e9f29c6dbfc.zip",
+          "S3Key": "f7fc3c65f3ee2984ac3d53b03b743f7b655f43af63f13afc7e20091ef9e88e20.zip",
         },
         "Environment": {
           "Variables": {
@@ -109,7 +115,7 @@ exports[`snapshot 1`] = `
         "PolicyDocument": {
           "Statement": [
             {
-              "Action": "dsql:DbConnect",
+              "Action": "dsql:DbConnectAdmin",
               "Effect": "Allow",
               "Resource": {
                 "Fn::GetAtt": [
@@ -246,10 +252,13 @@ exports[`snapshot 1`] = `
           "S3Bucket": {
             "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
           },
-          "S3Key": "1979e607946d44bd01a51e32d140d275b8ab53f80696dbbc761e977de21d22bf.zip",
+          "S3Key": "8764932ca1bc80d21e3e54e02e1bf1d81e028db44904e61376a2eb9fddd6a5fe.zip",
         },
         "Environment": {
           "Variables": {
+            "ANTHROPIC_API_KEY": {
+              "Ref": "AnthropicApiKey",
+            },
             "DSQL_ENDPOINT": {
               "Fn::GetAtt": [
                 "DsqlCluster",
@@ -459,7 +468,7 @@ exports[`snapshot 1`] = `
             "Arn",
           ],
         },
-        "version": "1777013561600",
+        "version": "1777189959432",
       },
       "Type": "AWS::CloudFormation::CustomResource",
       "UpdateReplacePolicy": "Delete",

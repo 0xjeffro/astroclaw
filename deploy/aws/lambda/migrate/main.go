@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"iclaw/pkg/app/passwords"
+
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -68,6 +70,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	defer pool.Close()
 
 	if err := runMigrations(ctx, pool, true); err != nil {
+		return nil, err
+	}
+
+	if err := seedCredentials(ctx, pool); err != nil {
 		return nil, err
 	}
 
@@ -189,6 +195,32 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, dsqlMode bool) error
 		}
 	}
 
+	return nil
+}
+
+// seedCredentials writes initial credentials into the database from
+// environment variables set by CDK parameters.
+func seedCredentials(ctx context.Context, pool *pgxpool.Pool) error {
+	svc := passwords.NewService(pool)
+
+	seeds := []struct {
+		envVar      string
+		name        string
+		description string
+	}{
+		{"ANTHROPIC_API_KEY", "anthropic-api-key", "Anthropic API key, set via CDK parameter"},
+	}
+
+	for _, s := range seeds {
+		key := os.Getenv(s.envVar)
+		if key == "" {
+			continue
+		}
+		if err := svc.UpsertCredential(ctx, s.name, key, s.description); err != nil {
+			return fmt.Errorf("seed credential %q: %w", s.name, err)
+		}
+		log.Printf("seeded %s", s.name)
+	}
 	return nil
 }
 

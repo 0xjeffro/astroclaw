@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat"
+	"iclaw/pkg/app/passwords"
 	"iclaw/pkg/provider"
 	"iclaw/pkg/tool"
 	"log"
@@ -35,14 +36,18 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	// LLM Provider
-	// TODO: API key management is TBD. Hardcoded placeholder for now.
+	// LLM Provider: read API key from credentials table.
+	pwSvc := passwords.NewService(pool)
+	cred, err := pwSvc.GetCredentialByName(ctx, "anthropic-api-key")
+	if err != nil {
+		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
+	}
 	var p provider.Provider
 	model := os.Getenv("MODEL_NAME")
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
-	p = provider.NewAnthropic("sk-ant-placeholder", model)
+	p = provider.NewAnthropic(cred.Value, model)
 
 	registry := tool.NewRegistry()
 	registry.Register(tool.GetCurrentTime)

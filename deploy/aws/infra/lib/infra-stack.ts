@@ -15,6 +15,14 @@ export class InfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // LLM API key, passed in via: cdk deploy --parameters AnthropicApiKey=sk-ant-xxx
+    const anthropicApiKey = new cdk.CfnParameter(this, 'AnthropicApiKey', {
+      type: 'String',
+      default: '',
+      noEcho: true,
+      description: 'Anthropic API key.',
+    });
+
     // CDK DSQL Doc: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dsql.CfnCluster.html
     // CloudFormation DSQL Doc: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dsql-cluster.html
     const cluster = new dsql.CfnCluster(this, 'DsqlCluster', {
@@ -100,6 +108,7 @@ export class InfraStack extends cdk.Stack {
       }),
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
+        ANTHROPIC_API_KEY: anthropicApiKey.valueAsString,
       },
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
