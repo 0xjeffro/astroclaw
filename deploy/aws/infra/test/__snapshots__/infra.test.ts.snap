@@ -2,6 +2,16 @@
 
 exports[`snapshot 1`] = `
 {
+  "Conditions": {
+    "ShouldGenerateApiKey": {
+      "Fn::Equals": [
+        {
+          "Ref": "GenerateApiKey",
+        },
+        "true",
+      ],
+    },
+  },
   "Outputs": {
     "ApiUrl": {
       "Description": "API Gateway endpoint",
@@ -26,6 +36,11 @@ exports[`snapshot 1`] = `
         ],
       },
     },
+    "GeneratedApiKey": {
+      "Condition": "ShouldGenerateApiKey",
+      "Description": "API key for authentication",
+      "Value": "00000000-0000-0000-0000-000000000000",
+    },
   },
   "Parameters": {
     "AnthropicApiKey": {
@@ -38,6 +53,15 @@ exports[`snapshot 1`] = `
       "Default": "/cdk-bootstrap/hnb659fds/version",
       "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
       "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+    "GenerateApiKey": {
+      "AllowedValues": [
+        "true",
+        "false",
+      ],
+      "Default": "false",
+      "Description": "Generate a new API key for authentication. Only set to true on first deploy or to rotate.",
+      "Type": "String",
     },
   },
   "Resources": {
@@ -54,7 +78,7 @@ exports[`snapshot 1`] = `
           "S3Bucket": {
             "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
           },
-          "S3Key": "f7fc3c65f3ee2984ac3d53b03b743f7b655f43af63f13afc7e20091ef9e88e20.zip",
+          "S3Key": "[ASSET HASH].zip",
         },
         "Environment": {
           "Variables": {
@@ -252,7 +276,7 @@ exports[`snapshot 1`] = `
           "S3Bucket": {
             "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
           },
-          "S3Key": "8764932ca1bc80d21e3e54e02e1bf1d81e028db44904e61376a2eb9fddd6a5fe.zip",
+          "S3Key": "[ASSET HASH].zip",
         },
         "Environment": {
           "Variables": {
@@ -263,6 +287,13 @@ exports[`snapshot 1`] = `
               "Fn::GetAtt": [
                 "DsqlCluster",
                 "Endpoint",
+              ],
+            },
+            "GENERATED_API_KEY": {
+              "Fn::If": [
+                "ShouldGenerateApiKey",
+                "00000000-0000-0000-0000-000000000000",
+                "",
               ],
             },
           },
@@ -347,7 +378,7 @@ exports[`snapshot 1`] = `
           "S3Bucket": {
             "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
           },
-          "S3Key": "07a90cc3efdfc34da22208dcd9d211f06f5b0e01b21e778edc7c3966b1f61d57.zip",
+          "S3Key": "[ASSET HASH].zip",
         },
         "Description": "AWS CDK resource provider framework - onEvent (TestStack/MigrateProvider)",
         "Environment": {
@@ -468,7 +499,7 @@ exports[`snapshot 1`] = `
             "Arn",
           ],
         },
-        "version": "1777189959432",
+        "version": "0",
       },
       "Type": "AWS::CloudFormation::CustomResource",
       "UpdateReplacePolicy": "Delete",

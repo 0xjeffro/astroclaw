@@ -3,8 +3,19 @@ import * as crypto from 'crypto';
 import { Template } from 'aws-cdk-lib/assertions';
 import { InfraStack } from '../lib/infra-stack';
 
-// Fix crypto.randomUUID to a constant so snapshot tests are deterministic.
+// Fix non-deterministic values so snapshot tests are stable.
+// - crypto.randomUUID: generated API key changes every synth
+// - Date.now: CustomResource version changes every synth
 jest.spyOn(crypto, 'randomUUID').mockReturnValue('00000000-0000-0000-0000-000000000000');
+jest.spyOn(Date, 'now').mockReturnValue(0);
+
+// Replace asset hashes (64-char hex) with a placeholder. Go binaries are
+// non-deterministic across builds, causing S3Key to change every time.
+// This is the community best practice for CDK snapshot testing.
+expect.addSnapshotSerializer({
+  test: (val: unknown) => typeof val === 'string' && /^[a-f0-9]{64}\.zip$/.test(val),
+  print: () => '"[ASSET HASH].zip"',
+});
 
 function createTemplate(): Template {
   const app = new cdk.App();
