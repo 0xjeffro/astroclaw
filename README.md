@@ -51,9 +51,39 @@ Apps are divided into two categories with different security boundaries:
 - Database role mapping via `GRANT CONNECT TO '<lambda-role-arn>' WITH <app_role>`.
 - More details are yet to be planned and discussed.
 
-## Development
+## Deploy to AWS
 
-### AWS Tools
+### Prerequisites
+
+1. Install [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+   ```bash
+   aws --version
+   ```
+
+2. Install [CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html)
+   ```bash
+   npm install -g aws-cdk
+   cdk --version
+   ```
+
+3. Configure AWS credentials
+   ```bash
+   aws configure
+   aws sts get-caller-identity
+   ```
+
+### Deploy
+
+```bash
+cd deploy/aws/infra
+npm install
+cdk bootstrap   # one-time per account/region: creates an S3 bucket and IAM roles that CDK needs to upload assets and deploy stacks. Skip this if you've bootstrapped this account/region before.
+cdk deploy
+```
+
+After deployment, the API URL will be printed in the terminal output.
+
+## Development
 - [Installing or updating to the latest version of the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 - [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html)
 
