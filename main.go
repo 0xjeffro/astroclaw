@@ -35,12 +35,14 @@ type Backend interface {
 // remoteBackend talks to the deployed API Gateway via HTTP.
 type remoteBackend struct {
 	baseURL string
+	apiKey  string
 	client  *http.Client
 }
 
-func newRemoteBackend(baseURL string) *remoteBackend {
+func newRemoteBackend(baseURL, apiKey string) *remoteBackend {
 	return &remoteBackend{
 		baseURL: strings.TrimRight(baseURL, "/"),
+		apiKey:  apiKey,
 		client:  &http.Client{},
 	}
 }
@@ -87,6 +89,7 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 	if err != nil {
 		return err
 	}
+	r.setHeaders(req)
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return err
@@ -119,12 +122,20 @@ func (r *remoteBackend) get(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.setHeaders(req)
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, body)
+	}
+	return body, nil
 }
 
 func (r *remoteBackend) post(ctx context.Context, path string, body []byte) ([]byte, error) {
@@ -132,13 +143,27 @@ func (r *remoteBackend) post(ctx context.Context, path string, body []byte) ([]b
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	r.setHeaders(req)
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, respBody)
+	}
+	return respBody, nil
+}
+
+func (r *remoteBackend) setHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if r.apiKey != "" {
+		req.Header.Set("x-api-key", r.apiKey)
+	}
 }
 
 func main() {
@@ -148,7 +173,7 @@ func main() {
 
 	// Remote mode: connect to deployed API Gateway.
 	if apiURL := os.Getenv("API_URL"); apiURL != "" {
-		backend = newRemoteBackend(apiURL)
+		backend = newRemoteBackend(apiURL, os.Getenv("API_KEY"))
 		fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
 	} else {
 		// Local mode: connect to local or container database.
