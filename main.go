@@ -201,7 +201,11 @@ func main() {
 			fmt.Println()
 			return
 		case input == "/sessions":
-			sessions, _ := backend.ListSessions(ctx)
+			sessions, err := backend.ListSessions(ctx)
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				continue
+			}
 			for _, s := range sessions {
 				marker := "  "
 				if s.ID == currentSession {
