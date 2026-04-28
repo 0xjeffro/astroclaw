@@ -86,7 +86,7 @@ func (a *Anthropic) Chat(ctx context.Context, msgs []Message, tools []Tool) (Mes
 	return parseAnthropicResponse(resp.Body)
 }
 
-// extractSystem pulls out system messages from the msgs slice and returns
+// extractSystem pulls out system messages from the msg slice and returns
 // the concatenated system prompt + the remaining non-system messages.
 func extractSystem(msgs []Message) (string, []Message) {
 	var system string
@@ -114,8 +114,8 @@ func toAnthropicMessages(msgs []Message) []map[string]any {
 	for _, m := range msgs {
 		switch {
 		// Case 1: Tool result.
-		// Ours:      {role:"tool", tool_call_id:"xxx", content:"result"}
-		// Anthropic: {role:"user", content:[{type:"tool_result", tool_use_id:"xxx", content:"result"}]}
+		// Ours: {role:"tool", tool_call_id:"xxx", content:"result"}
+		// Anthropic: {role:"user", content:[{type:"tool_result", tool_use_id:"xxx", content: "result"}]}
 		case m.Role == "tool":
 			out = appendToolResult(out, m)
 
@@ -126,8 +126,8 @@ func toAnthropicMessages(msgs []Message) []map[string]any {
 			out = append(out, buildAssistantWithToolCalls(m))
 
 		// Case 3: Plain user or assistant message (text only).
-		// Ours:      {role:"user", content:"hello"}
-		// Anthropic: {role:"user", content:[{type:"text", text:"hello"}]}
+		// Ours: {role:"user", content:"hello"}
+		// Anthropic: {role:"user", content:[{type:"text", text: "hello"}]}
 		default:
 			out = append(out, map[string]any{
 				"role": m.Role,
