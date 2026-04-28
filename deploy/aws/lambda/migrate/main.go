@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"iclaw/pkg/app/passwords"
+	"iclaw/pkg/app/settings"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
@@ -74,6 +75,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	}
 
 	if err := seedCredentials(ctx, pool); err != nil {
+		return nil, err
+	}
+
+	if err := seedSettings(ctx, pool); err != nil {
 		return nil, err
 	}
 
@@ -218,6 +223,35 @@ func seedCredentials(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("seed api-key: %w", err)
 		}
 		log.Printf("seeded api-key: %s", key)
+	}
+	return nil
+}
+
+// seedSettings writes default prompt settings (SOUL, USER) on first deploy.
+// Uses UpsertPromptSetting so existing values are not overwritten.
+func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
+	svc := settings.NewService(pool)
+
+	defaults := []struct {
+		name  string
+		value string
+	}{
+		{"soul", "You are iClaw, a personal AI assistant. " +
+			"Be genuinely helpful, not performatively helpful. Skip filler words like 'Great question!' and just help. " +
+			"Have opinions. Be direct. Admit uncertainty when appropriate. " +
+			"Be resourceful before asking. Try to figure it out, then ask if stuck. " +
+			"Be concise when needed, thorough when it matters."},
+		{"user", ""},
+	}
+
+	for _, d := range defaults {
+		// Only seed if the setting doesn't exist yet.
+		if _, err := svc.GetPromptSetting(ctx, d.name); err != nil {
+			if err := svc.UpsertPromptSetting(ctx, d.name, d.value); err != nil {
+				return fmt.Errorf("seed setting %q: %w", d.name, err)
+			}
+			log.Printf("seeded setting: %s", d.name)
+		}
 	}
 	return nil
 }
