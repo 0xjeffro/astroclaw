@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat"
+	"iclaw/pkg/app/notes"
+	"iclaw/pkg/app/settings"
 	"iclaw/pkg/provider"
 	"iclaw/pkg/tool"
 	"io"
@@ -269,27 +271,7 @@ func initLocalBackend(ctx context.Context) *chat.Service {
 		log.Fatal("OPENAI_API_KEY or ANTHROPIC_API_KEY must be set")
 	}
 
-	registry := tool.NewRegistry()
-	registry.Register(&tool.TimeTool{})
-	registry.Register(&tool.ArithmeticTool{})
-	registry.Register(&tool.ReadFileTool{})
-	registry.Register(&tool.ExecCommandTool{})
-	registry.Register(&tool.WriteFileTool{})
-	registry.Register(&tool.EditFileTool{})
-
-	systemPrompt := "You are iClaw, an intelligent assistant that can perform various tasks by calling tools. " +
-		"Use tools to get information, manipulate files, execute commands, and more. " +
-		"Always think step by step and use tools whenever appropriate. " +
-		"Only respond with plain text, do not use LaTeX or markdown formatting."
-
 	scanner := bufio.NewScanner(os.Stdin)
-
-	createFn := func(s *chat.Session) *agent.Agent {
-		return agent.NewFromContext(
-			p, systemPrompt, registry, 128000,
-			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		)
-	}
 
 	configFn := func(a *agent.Agent) {
 		a.OnToolCall = func(id string, name string, args string) {
@@ -337,6 +319,43 @@ func initLocalBackend(ctx context.Context) *chat.Service {
 			log.Fatalf("connect to container database: %v", err)
 		}
 		fmt.Println("PostgreSQL container ready.")
+	}
+
+	// Build system prompt from Settings App + Notes App.
+	settingsSvc := settings.NewService(pool)
+	notesSvc := notes.NewService(pool)
+
+	var cfg agent.PromptConfig
+	if soul, err := settingsSvc.GetPromptSetting(ctx, "soul"); err == nil {
+		cfg.Soul = soul.Value
+	}
+	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
+		cfg.User = user.Value
+	}
+	if memories, err := notesSvc.FormatForPrompt(ctx, agent.DefaultCharLimits().Memories); err == nil {
+		cfg.Memories = memories
+	}
+	systemPrompt := agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
+
+	// Notes service shared across sessions. MemorySaveTool is created
+	// per-session in createFn with the session's ID.
+	createFn := func(s *chat.Session) *agent.Agent {
+		registry := tool.NewRegistry()
+		registry.Register(&tool.TimeTool{})
+		registry.Register(&tool.ArithmeticTool{})
+		registry.Register(&tool.ReadFileTool{})
+		registry.Register(&tool.ExecCommandTool{})
+		registry.Register(&tool.WriteFileTool{})
+		registry.Register(&tool.EditFileTool{})
+		registry.Register(&tool.MemorySaveTool{
+			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
+			SessionID: s.ID,
+		})
+
+		return agent.NewFromContext(
+			p, systemPrompt, registry, 128000,
+			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
+		)
 	}
 
 	return chat.NewService(pool, createFn, configFn)
