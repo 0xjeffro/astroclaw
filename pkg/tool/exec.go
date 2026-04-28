@@ -32,7 +32,7 @@ func (t *ExecCommandTool) Parameters() map[string]any {
 		"required": []string{"command"},
 	}
 }
-func (t *ExecCommandTool) Execute(args string) (string, error) {
+func (t *ExecCommandTool) Execute(parentCtx context.Context, args string) (string, error) {
 	var p struct {
 		Command string `json:"command"`
 	}
@@ -40,7 +40,7 @@ func (t *ExecCommandTool) Execute(args string) (string, error) {
 		return "", fmt.Errorf("bad args: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, execTimeout)
 	defer cancel()
 
 	// "sh -c" delegates the entire command string to a real shell, so pipes,

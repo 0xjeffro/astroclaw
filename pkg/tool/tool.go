@@ -1,11 +1,13 @@
 package tool
 
+import "context"
+
 // Tool is the interface that all tools must implement.
 type Tool interface {
 	Name() string
 	Description() string
 	Parameters() map[string]any
-	Execute(args string) (string, error)
+	Execute(ctx context.Context, args string) (string, error)
 	Approval() bool  // if true, the agent must ask the user before executing
 	Workspace() bool // needs filesystem/shell environment (EC2), otherwise runs serverless (Lambda)
 }

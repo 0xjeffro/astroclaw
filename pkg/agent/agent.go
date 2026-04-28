@@ -136,7 +136,7 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 				a.OnToolCall(tc.ID, tc.Function.Name, tc.Function.Arguments)
 			}
 
-			result, err := safeToolRun(t, tc.Function.Arguments)
+			result, err := safeToolRun(ctx, t, tc.Function.Arguments)
 			if err != nil {
 				// Tool failed, use the error as a tool result.
 				result = fmt.Sprintf("error: %v", err)
@@ -182,12 +182,12 @@ func toProviderTools(reg *tool.Registry) []provider.Tool {
 	return out
 }
 
-func safeToolRun(t tool.Tool, args string) (result string, err error) {
+func safeToolRun(ctx context.Context, t tool.Tool, args string) (result string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			result = fmt.Sprintf("error: tool panicked: %v", r)
 			err = nil
 		}
 	}()
-	return t.Execute(args)
+	return t.Execute(ctx, args)
 }

@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"go/token"
@@ -27,7 +28,7 @@ func (t *ArithmeticTool) Parameters() map[string]any {
 		"required": []string{"expression"},
 	}
 }
-func (t *ArithmeticTool) Execute(args string) (string, error) {
+func (t *ArithmeticTool) Execute(_ context.Context, args string) (string, error) {
 	var p struct {
 		Expression string `json:"expression"`
 	}

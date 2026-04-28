@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestEvalArithmetic_BasicOps(t *testing.T) {
 		{"10.0/4.0", "5/2"},
 	}
 	for _, tt := range tests {
-		got, err := (&ArithmeticTool{}).Execute(makeArgs(tt.expr))
+		got, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs(tt.expr))
 		if err != nil {
 			t.Errorf("Run(%q): unexpected error: %v", tt.expr, err)
 			continue
@@ -47,7 +48,7 @@ func TestEvalArithmetic_BasicOps(t *testing.T) {
 // grouping — which would be a Go stdlib bug, but we pin it down anyway
 // because our tool's description promises parentheses support.
 func TestEvalArithmetic_Parentheses(t *testing.T) {
-	got, err := (&ArithmeticTool{}).Execute(makeArgs("(1+2)*3"))
+	got, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs("(1+2)*3"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestEvalArithmetic_Parentheses(t *testing.T) {
 // not a truncated decimal. The model receives this fraction as-is and
 // can interpret it correctly in its response to the user.
 func TestEvalArithmetic_FloatDivision(t *testing.T) {
-	got, err := (&ArithmeticTool{}).Execute(makeArgs("10.0/3.0"))
+	got, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs("10.0/3.0"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestEvalArithmetic_FloatDivision(t *testing.T) {
 // we notice. The model can work around this by using float operands
 // (10.0/3.0) when it needs a precise result.
 func TestEvalArithmetic_IntegerDivision(t *testing.T) {
-	got, err := (&ArithmeticTool{}).Execute(makeArgs("10/3"))
+	got, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs("10/3"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestEvalArithmetic_IntegerDivision(t *testing.T) {
 // the model will either retry with a corrected expression or fall back
 // to answering without the tool.
 func TestEvalArithmetic_InvalidExpression(t *testing.T) {
-	_, err := (&ArithmeticTool{}).Execute(makeArgs("abc"))
+	_, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs("abc"))
 	if err == nil {
 		t.Fatal("expected error for invalid expression, got nil")
 	}
@@ -110,7 +111,7 @@ func TestEvalArithmetic_InvalidExpression(t *testing.T) {
 // in Run: json.Unmarshal failing means something is seriously wrong with
 // the tool_call payload, and we surface it cleanly with a "bad args" prefix.
 func TestEvalArithmetic_BadJSON(t *testing.T) {
-	_, err := (&ArithmeticTool{}).Execute("not json")
+	_, err := (&ArithmeticTool{}).Execute(context.Background(), "not json")
 	if err == nil {
 		t.Fatal("expected error for bad JSON, got nil")
 	}
@@ -125,7 +126,7 @@ func TestEvalArithmetic_BadJSON(t *testing.T) {
 // types.Eval will reject it. The error gets fed back to the model,
 // which can then explain to the user why the expression is invalid.
 func TestEvalArithmetic_DivisionByZero(t *testing.T) {
-	_, err := (&ArithmeticTool{}).Execute(makeArgs("1/0"))
+	_, err := (&ArithmeticTool{}).Execute(context.Background(), makeArgs("1/0"))
 	if err == nil {
 		t.Fatal("expected error for division by zero, got nil")
 	}

@@ -1,6 +1,9 @@
 package tool
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type TimeTool struct{}
 
@@ -15,7 +18,7 @@ func (t *TimeTool) Parameters() map[string]any {
 		"required":   []string{},
 	}
 }
-func (t *TimeTool) Execute(_ string) (string, error) {
+func (t *TimeTool) Execute(_ context.Context, _ string) (string, error) {
 	return time.Now().Format(time.RFC3339), nil
 }
 func (t *TimeTool) Approval() bool  { return false }

@@ -23,9 +23,9 @@ func (f *fakeTool) Description() string { return "test tool" }
 func (f *fakeTool) Parameters() map[string]any {
 	return map[string]any{"type": "object", "properties": map[string]any{}}
 }
-func (f *fakeTool) Execute(args string) (string, error) { return f.executeFn(args) }
-func (f *fakeTool) Approval() bool                      { return f.needsApproval }
-func (f *fakeTool) Workspace() bool                     { return false }
+func (f *fakeTool) Execute(_ context.Context, args string) (string, error) { return f.executeFn(args) }
+func (f *fakeTool) Approval() bool                                         { return f.needsApproval }
+func (f *fakeTool) Workspace() bool                                        { return false }
 
 // fakeResponse is one entry in a fakeProvider's scripted responses. Each
 // call to Chat consumes one response: a non-nil err means that the call fails,

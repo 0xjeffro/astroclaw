@@ -2,6 +2,7 @@ package tool
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,7 +28,7 @@ func (t *ReadFileTool) Parameters() map[string]any {
 		"required": []string{"path"},
 	}
 }
-func (t *ReadFileTool) Execute(args string) (string, error) {
+func (t *ReadFileTool) Execute(_ context.Context, args string) (string, error) {
 	var p struct {
 		Path string `json:"path"`
 	}

@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -12,7 +13,7 @@ import (
 // wrong layout — which would cause the model to receive a time string it
 // may not be able to interpret reliably.
 func TestGetCurrentTime_ReturnsValidRFC3339(t *testing.T) {
-	got, err := (&TimeTool{}).Execute("")
+	got, err := (&TimeTool{}).Execute(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

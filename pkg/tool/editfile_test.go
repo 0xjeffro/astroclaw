@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -35,7 +36,7 @@ func setupEditFile(t *testing.T, content string) string {
 func TestEditFile_SingleReplace(t *testing.T) {
 	path := setupEditFile(t, "hello world")
 
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs(path, "world", "Go"))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs(path, "world", "Go"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestEditFile_SingleReplace(t *testing.T) {
 func TestEditFile_DeleteText(t *testing.T) {
 	path := setupEditFile(t, "aaa bbb ccc")
 
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs(path, " bbb", ""))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs(path, " bbb", ""))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestEditFile_DeleteText(t *testing.T) {
 func TestEditFile_NotFound(t *testing.T) {
 	path := setupEditFile(t, "hello world")
 
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs(path, "xyz", "abc"))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs(path, "xyz", "abc"))
 	if err == nil {
 		t.Fatal("expected error for old_text not found")
 	}
@@ -90,7 +91,7 @@ func TestEditFile_NotFound(t *testing.T) {
 func TestEditFile_AmbiguousMatch(t *testing.T) {
 	path := setupEditFile(t, "aaa bbb aaa")
 
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs(path, "aaa", "ccc"))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs(path, "aaa", "ccc"))
 	if err == nil {
 		t.Fatal("expected error for ambiguous match")
 	}
@@ -113,7 +114,7 @@ func TestEditFile_MultilineReplace(t *testing.T) {
 	original := "line1\nline2\nline3\nline4\n"
 	path := setupEditFile(t, original)
 
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs(path, "line2\nline3", "lineA\nlineB\nlineC"))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs(path, "line2\nline3", "lineA\nlineB\nlineC"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestEditFile_MultilineReplace(t *testing.T) {
 // TestEditFile_FileNotExist verifies that editing a non-existent file
 // returns an error with the file path.
 func TestEditFile_FileNotExist(t *testing.T) {
-	_, err := (&EditFileTool{}).Execute(makeEditFileArgs("/no/such/file.txt", "a", "b"))
+	_, err := (&EditFileTool{}).Execute(context.Background(), makeEditFileArgs("/no/such/file.txt", "a", "b"))
 	if err == nil {
 		t.Fatal("expected error for non-existent file")
 	}
@@ -140,7 +141,7 @@ func TestEditFile_FileNotExist(t *testing.T) {
 // TestEditFile_BadJSON verifies that malformed JSON arguments return
 // an error rather than panicking.
 func TestEditFile_BadJSON(t *testing.T) {
-	_, err := (&EditFileTool{}).Execute("not json")
+	_, err := (&EditFileTool{}).Execute(context.Background(), "not json")
 	if err == nil {
 		t.Fatal("expected error for bad JSON, got nil")
 	}

@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,7 +35,7 @@ func (t *WriteFileTool) Parameters() map[string]any {
 		"required": []string{"path", "content"},
 	}
 }
-func (t *WriteFileTool) Execute(args string) (string, error) {
+func (t *WriteFileTool) Execute(_ context.Context, args string) (string, error) {
 	var p struct {
 		Path      string `json:"path"`
 		Content   string `json:"content"`

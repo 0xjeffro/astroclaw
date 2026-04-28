@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -37,7 +38,7 @@ func (t *EditFileTool) Parameters() map[string]any {
 		"required": []string{"path", "old_text", "new_text"},
 	}
 }
-func (t *EditFileTool) Execute(args string) (string, error) {
+func (t *EditFileTool) Execute(_ context.Context, args string) (string, error) {
 	var p struct {
 		Path    string `json:"path"`
 		OldText string `json:"old_text"`
