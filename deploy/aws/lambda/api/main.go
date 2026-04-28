@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat"
+	"iclaw/pkg/app/notes"
 	"iclaw/pkg/app/passwords"
+	"iclaw/pkg/app/settings"
 	"iclaw/pkg/provider"
 	"iclaw/pkg/tool"
 	"log"
@@ -16,11 +18,12 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
 	svc    *chat.Service
-	apiKey string // read from credentials table, used to authenticate requests
+	apiKey string
 )
 
 // init runs once when Lambda cold-starts. Connects to DSQL via IAM
@@ -55,6 +58,7 @@ func init() {
 	} else {
 		apiKey = apiKeyCred.Value
 	}
+
 	var p provider.Provider
 	model := os.Getenv("MODEL_NAME")
 	if model == "" {
@@ -62,22 +66,28 @@ func init() {
 	}
 	p = provider.NewAnthropic(llmCred.Value, model)
 
-	registry := tool.NewRegistry()
-	registry.Register(&tool.TimeTool{})
-	registry.Register(&tool.ArithmeticTool{})
-	registry.Register(&tool.ReadFileTool{})
-	// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
-	// use ExecCommand to access DSQL credentials and compromise the database.
-	registry.Register(&tool.ExecCommandTool{})
-	registry.Register(&tool.WriteFileTool{})
-	registry.Register(&tool.EditFileTool{})
+	// Build system prompt from Settings App + Notes App.
+	systemPrompt := buildPrompt(ctx, pool)
 
-	systemPrompt := "You are iClaw, an intelligent assistant that can perform various tasks by calling tools. " +
-		"Use tools to get information, manipulate files, execute commands, and more. " +
-		"Always think step by step and use tools whenever appropriate. " +
-		"Only respond with plain text, do not use LaTeX or markdown formatting."
+	// Notes service for memory_save tool (created per-session in createFn).
+	notesSvc := notes.NewService(pool)
 
 	createFn := func(s *chat.Session) *agent.Agent {
+		// Build tool registry per session because MemorySaveTool needs the session ID.
+		registry := tool.NewRegistry()
+		registry.Register(&tool.TimeTool{})
+		registry.Register(&tool.ArithmeticTool{})
+		registry.Register(&tool.ReadFileTool{})
+		// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
+		// use ExecCommand to access DSQL credentials and compromise the database.
+		registry.Register(&tool.ExecCommandTool{})
+		registry.Register(&tool.WriteFileTool{})
+		registry.Register(&tool.EditFileTool{})
+		registry.Register(&tool.MemorySaveTool{
+			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
+			SessionID: s.ID,
+		})
+
 		return agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
 			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
@@ -85,6 +95,27 @@ func init() {
 	}
 
 	svc = chat.NewService(pool, createFn, nil)
+}
+
+// buildPrompt reads SOUL and USER from Settings App, memories from Notes App,
+// and assembles the system prompt. Called once on cold-start.
+func buildPrompt(ctx context.Context, pool *pgxpool.Pool) string {
+	settingsSvc := settings.NewService(pool)
+	notesSvc := notes.NewService(pool)
+
+	var cfg agent.PromptConfig
+
+	if soul, err := settingsSvc.GetPromptSetting(ctx, "soul"); err == nil {
+		cfg.Soul = soul.Value
+	}
+	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
+		cfg.User = user.Value
+	}
+	if memories, err := notesSvc.FormatForPrompt(ctx, agent.DefaultCharLimits().Memories); err == nil {
+		cfg.Memories = memories
+	}
+
+	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
