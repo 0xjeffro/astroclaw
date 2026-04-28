@@ -116,8 +116,8 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 				continue // continue to the next tool call
 			}
 
-			// Check if this tool need user approval before execution
-			if t.NeedsApproval && a.OnApproval != nil {
+			// Check if this tool needs user approval before execution
+			if t.Approval() && a.OnApproval != nil {
 				if !a.OnApproval(tc.Function.Name, tc.Function.Arguments) {
 					a.history = append(a.history, provider.Message{
 						Role:       "tool",
@@ -173,9 +173,9 @@ func toProviderTools(reg *tool.Registry) []provider.Tool {
 		out = append(out, provider.Tool{
 			Type: "function",
 			Function: provider.ToolFunction{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  t.Parameters,
+				Name:        t.Name(),
+				Description: t.Description(),
+				Parameters:  t.Parameters(),
 			},
 		})
 	}
@@ -189,5 +189,5 @@ func safeToolRun(t tool.Tool, args string) (result string, err error) {
 			err = nil
 		}
 	}()
-	return t.Run(args)
+	return t.Execute(args)
 }

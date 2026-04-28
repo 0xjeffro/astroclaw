@@ -11,6 +11,22 @@ import (
 	"iclaw/pkg/tool"
 )
 
+// fakeTool implements tool.Tool for testing.
+type fakeTool struct {
+	name          string
+	needsApproval bool
+	executeFn     func(args string) (string, error)
+}
+
+func (f *fakeTool) Name() string        { return f.name }
+func (f *fakeTool) Description() string { return "test tool" }
+func (f *fakeTool) Parameters() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{}}
+}
+func (f *fakeTool) Execute(args string) (string, error) { return f.executeFn(args) }
+func (f *fakeTool) Approval() bool                      { return f.needsApproval }
+func (f *fakeTool) Workspace() bool                     { return false }
+
 // fakeResponse is one entry in a fakeProvider's scripted responses. Each
 // call to Chat consumes one response: a non-nil err means that the call fails,
 // otherwise the reply is returned.
@@ -247,14 +263,13 @@ func TestAgentReply_RollsBackOnError(t *testing.T) {
 // is NOT executed and the model receives a rejection message. This is the
 // core safety guarantee: if the user says no, nothing happens.
 func TestApproval_Denied(t *testing.T) {
-	// Set up a tool that needs approval and tracks if Run was called.
+	// Set up a tool that needs approval and tracks if Execute was called.
 	executed := false
 	reg := tool.NewRegistry()
-	reg.Register(tool.Tool{
-		Name:          "dangerous_tool",
-		NeedsApproval: true,
-		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
-		Run: func(args string) (string, error) {
+	reg.Register(&fakeTool{
+		name:          "dangerous_tool",
+		needsApproval: true,
+		executeFn: func(args string) (string, error) {
 			executed = true
 			return "executed", nil
 		},
@@ -307,11 +322,10 @@ func TestApproval_Denied(t *testing.T) {
 // executes normally and its real result is returned to the model.
 func TestApproval_Approved(t *testing.T) {
 	reg := tool.NewRegistry()
-	reg.Register(tool.Tool{
-		Name:          "dangerous_tool",
-		NeedsApproval: true,
-		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
-		Run: func(args string) (string, error) {
+	reg.Register(&fakeTool{
+		name:          "dangerous_tool",
+		needsApproval: true,
+		executeFn: func(args string) (string, error) {
 			return "tool executed successfully", nil
 		},
 	})
@@ -361,11 +375,10 @@ func TestApproval_Approved(t *testing.T) {
 func TestApproval_NilCallback(t *testing.T) {
 	executed := false
 	reg := tool.NewRegistry()
-	reg.Register(tool.Tool{
-		Name:          "dangerous_tool",
-		NeedsApproval: true,
-		Parameters:    map[string]any{"type": "object", "properties": map[string]any{}},
-		Run: func(args string) (string, error) {
+	reg.Register(&fakeTool{
+		name:          "dangerous_tool",
+		needsApproval: true,
+		executeFn: func(args string) (string, error) {
 			executed = true
 			return "executed", nil
 		},

@@ -1,12 +1,13 @@
 package tool
 
-type Tool struct {
-	Name              string
-	Description       string
-	Parameters        map[string]any
-	Run               func(args string) (string, error)
-	NeedsApproval     bool // if true, agent ask user before executing
-	RequiresWorkspace bool // needs filesystem/shell environment (EC2), otherwise runs serverless (Lambda)
+// Tool is the interface that all tools must implement.
+type Tool interface {
+	Name() string
+	Description() string
+	Parameters() map[string]any
+	Execute(args string) (string, error)
+	Approval() bool  // if true, the agent must ask the user before executing
+	Workspace() bool // needs filesystem/shell environment (EC2), otherwise runs serverless (Lambda)
 }
 
 type Registry struct {
@@ -20,7 +21,7 @@ func NewRegistry() *Registry {
 
 // Register adds a tool to the registry.
 func (r *Registry) Register(t Tool) {
-	r.tools[t.Name] = t
+	r.tools[t.Name()] = t
 }
 
 // Get returns the tool with the given name if it exists.
@@ -29,7 +30,7 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	return t, ok
 }
 
-// List returns a copy of the registry's tools.'
+// List returns a copy of the registry's tools.
 func (r *Registry) List() []Tool {
 	var tools []Tool
 	for _, t := range r.tools {

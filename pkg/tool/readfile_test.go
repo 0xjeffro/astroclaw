@@ -23,7 +23,7 @@ func TestReadFile_NormalText(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hello.txt")
 	_ = os.WriteFile(path, []byte("hello world"), 0644)
 
-	got, err := ReadFile.Run(makeReadFileArgs(path))
+	got, err := (&ReadFileTool{}).Execute(makeReadFileArgs(path))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestReadFile_EmptyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty.txt")
 	_ = os.WriteFile(path, []byte{}, 0644)
 
-	got, err := ReadFile.Run(makeReadFileArgs(path))
+	got, err := (&ReadFileTool{}).Execute(makeReadFileArgs(path))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestReadFile_EmptyFile(t *testing.T) {
 // containing the file path, so the model can tell the user which file was
 // not found.
 func TestReadFile_NotFound(t *testing.T) {
-	_, err := ReadFile.Run(makeReadFileArgs("/no/such/file.txt"))
+	_, err := (&ReadFileTool{}).Execute(makeReadFileArgs("/no/such/file.txt"))
 	if err == nil {
 		t.Fatal("expected error for non-existent file, got nil")
 	}
@@ -70,7 +70,7 @@ func TestReadFile_Truncation(t *testing.T) {
 	// Write 80KB of 'a' — well over the 64KB limit.
 	_ = os.WriteFile(path, bytes.Repeat([]byte("a"), 80*1024), 0644)
 
-	got, err := ReadFile.Run(makeReadFileArgs(path))
+	got, err := (&ReadFileTool{}).Execute(makeReadFileArgs(path))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestReadFile_BinaryFile(t *testing.T) {
 	// Write some bytes with a null byte in the middle.
 	_ = os.WriteFile(path, []byte("hello\x00world"), 0644)
 
-	_, err := ReadFile.Run(makeReadFileArgs(path))
+	_, err := (&ReadFileTool{}).Execute(makeReadFileArgs(path))
 	if err == nil {
 		t.Fatal("expected error for binary file, got nil")
 	}
@@ -104,7 +104,7 @@ func TestReadFile_BinaryFile(t *testing.T) {
 // TestReadFile_BadJSON verifies that malformed JSON arguments return an
 // error rather than panicking.
 func TestReadFile_BadJSON(t *testing.T) {
-	_, err := ReadFile.Run("not json")
+	_, err := (&ReadFileTool{}).Execute("not json")
 	if err == nil {
 		t.Fatal("expected error for bad JSON, got nil")
 	}

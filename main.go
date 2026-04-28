@@ -270,12 +270,12 @@ func initLocalBackend(ctx context.Context) *chat.Service {
 	}
 
 	registry := tool.NewRegistry()
-	registry.Register(tool.GetCurrentTime)
-	registry.Register(tool.EvalArithmetic)
-	registry.Register(tool.ReadFile)
-	registry.Register(tool.ExecCommand)
-	registry.Register(tool.WriteFile)
-	registry.Register(tool.EditFile)
+	registry.Register(&tool.TimeTool{})
+	registry.Register(&tool.ArithmeticTool{})
+	registry.Register(&tool.ReadFileTool{})
+	registry.Register(&tool.ExecCommandTool{})
+	registry.Register(&tool.WriteFileTool{})
+	registry.Register(&tool.EditFileTool{})
 
 	systemPrompt := "You are iClaw, an intelligent assistant that can perform various tasks by calling tools. " +
 		"Use tools to get information, manipulate files, execute commands, and more. " +

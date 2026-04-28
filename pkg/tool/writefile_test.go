@@ -24,7 +24,7 @@ func makeWriteFileArgs(path, content string, overwrite bool) string {
 func TestWriteFile_NewFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "new.txt")
 
-	got, err := WriteFile.Run(makeWriteFileArgs(path, "hello world", false))
+	got, err := (&WriteFileTool{}).Execute(makeWriteFileArgs(path, "hello world", false))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestWriteFile_RefuseOverwrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "existing.txt")
 	_ = os.WriteFile(path, []byte("original"), 0644)
 
-	_, err := WriteFile.Run(makeWriteFileArgs(path, "replaced", false))
+	_, err := (&WriteFileTool{}).Execute(makeWriteFileArgs(path, "replaced", false))
 	if err == nil {
 		t.Fatal("expected error when overwriting without overwrite=true")
 	}
@@ -66,7 +66,7 @@ func TestWriteFile_OverwriteExplicit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "existing.txt")
 	_ = os.WriteFile(path, []byte("original"), 0644)
 
-	_, err := WriteFile.Run(makeWriteFileArgs(path, "replaced", true))
+	_, err := (&WriteFileTool{}).Execute(makeWriteFileArgs(path, "replaced", true))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestWriteFile_OverwriteExplicit(t *testing.T) {
 func TestWriteFile_CreatesParentDirs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a", "b", "c", "deep.txt")
 
-	_, err := WriteFile.Run(makeWriteFileArgs(path, "deep content", false))
+	_, err := (&WriteFileTool{}).Execute(makeWriteFileArgs(path, "deep content", false))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestWriteFile_CreatesParentDirs(t *testing.T) {
 // TestWriteFile_BadJSON verifies that malformed JSON arguments return
 // an error rather than panicking.
 func TestWriteFile_BadJSON(t *testing.T) {
-	_, err := WriteFile.Run("not json")
+	_, err := (&WriteFileTool{}).Execute("not json")
 	if err == nil {
 		t.Fatal("expected error for bad JSON, got nil")
 	}

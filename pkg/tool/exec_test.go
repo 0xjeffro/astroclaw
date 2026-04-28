@@ -17,7 +17,7 @@ func makeExecArgs(command string) string {
 // TestExecCommand_BasicCommand verifies the happy path: a simple command
 // runs successfully and its stdout is returned.
 func TestExecCommand_BasicCommand(t *testing.T) {
-	got, err := ExecCommand.Run(makeExecArgs("echo hello"))
+	got, err := (&ExecCommandTool{}).Execute(makeExecArgs("echo hello"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestExecCommand_BasicCommand(t *testing.T) {
 // "sh -c", the pipe character would be passed as a literal argument
 // and the command would fail.
 func TestExecCommand_Pipe(t *testing.T) {
-	got, err := ExecCommand.Run(makeExecArgs("echo hello | tr h H"))
+	got, err := (&ExecCommandTool{}).Execute(makeExecArgs("echo hello | tr h H"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestExecCommand_Pipe(t *testing.T) {
 // no matches) — the model needs to see the output to understand what
 // went wrong, not just a generic error.
 func TestExecCommand_FailedCommand(t *testing.T) {
-	got, err := ExecCommand.Run(makeExecArgs("echo 'some output' && false"))
+	got, err := (&ExecCommandTool{}).Execute(makeExecArgs("echo 'some output' && false"))
 	// err should be nil — command failure is reported in the result, not as an error
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -64,7 +64,7 @@ func TestExecCommand_FailedCommand(t *testing.T) {
 // stdout. CombinedOutput merges both streams, so diagnostic messages and
 // error output are visible to the model.
 func TestExecCommand_Stderr(t *testing.T) {
-	got, err := ExecCommand.Run(makeExecArgs("echo err_msg >&2"))
+	got, err := (&ExecCommandTool{}).Execute(makeExecArgs("echo err_msg >&2"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestExecCommand_Stderr(t *testing.T) {
 // from blowing up the LLM context window.
 func TestExecCommand_Truncation(t *testing.T) {
 	// Generate 80KB of 'a' — well over the 64KB limit.
-	got, err := ExecCommand.Run(makeExecArgs("head -c 80000 /dev/zero | tr '\\0' 'a'"))
+	got, err := (&ExecCommandTool{}).Execute(makeExecArgs("head -c 80000 /dev/zero | tr '\\0' 'a'"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestExecCommand_Truncation(t *testing.T) {
 // TestExecCommand_BadJSON verifies that malformed JSON arguments return
 // an error rather than panicking.
 func TestExecCommand_BadJSON(t *testing.T) {
-	_, err := ExecCommand.Run("not json")
+	_, err := (&ExecCommandTool{}).Execute("not json")
 	if err == nil {
 		t.Fatal("expected error for bad JSON, got nil")
 	}

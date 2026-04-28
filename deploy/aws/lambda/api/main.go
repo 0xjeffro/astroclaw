@@ -63,14 +63,14 @@ func init() {
 	p = provider.NewAnthropic(llmCred.Value, model)
 
 	registry := tool.NewRegistry()
-	registry.Register(tool.GetCurrentTime)
-	registry.Register(tool.EvalArithmetic)
-	registry.Register(tool.ReadFile)
+	registry.Register(&tool.TimeTool{})
+	registry.Register(&tool.ArithmeticTool{})
+	registry.Register(&tool.ReadFileTool{})
 	// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
 	// use ExecCommand to access DSQL credentials and compromise the database.
-	registry.Register(tool.ExecCommand)
-	registry.Register(tool.WriteFile)
-	registry.Register(tool.EditFile)
+	registry.Register(&tool.ExecCommandTool{})
+	registry.Register(&tool.WriteFileTool{})
+	registry.Register(&tool.EditFileTool{})
 
 	systemPrompt := "You are iClaw, an intelligent assistant that can perform various tasks by calling tools. " +
 		"Use tools to get information, manipulate files, execute commands, and more. " +
