@@ -3,13 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat"
-	"iclaw/pkg/app/notes"
 	"iclaw/pkg/app/passwords"
-	"iclaw/pkg/app/settings"
-	"iclaw/pkg/provider"
-	"iclaw/pkg/tool"
 	"log"
 	"net/http"
 	"os"
@@ -18,7 +13,6 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -26,15 +20,12 @@ var (
 	apiKey string
 )
 
-// init runs once when Lambda cold-starts. Connects to DSQL via IAM
-// authentication, sets up LLM provider and chat service.
+// init runs once when Lambda cold-starts. Connects to DSQL and sets up
+// the chat service for session CRUD operations only. (No LLM provider
+// or tools needed here cuz reply is handled by the Reply Lambda.)
 func init() {
 	ctx := context.Background()
 
-	// Connect to DSQL using IAM authentication.
-	// DSQL_ENDPOINT is set by CDK from the cluster's endpoint attribute.
-	// TODO: support standard PostgreSQL via pgxpool.New() for users who choose Aurora PostgreSQL over DSQL in CDK config.
-	// Go connector docs: https://docs.aws.amazon.com/aurora-dsql/latest/userguide/SECTION_program-with-go-pgx-connector.html
 	pool, err := dsql.NewPool(ctx, dsql.Config{
 		Host: os.Getenv("DSQL_ENDPOINT"),
 	})
@@ -42,16 +33,8 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	// Read credentials from the database.
+	// Read API authentication key.
 	pwSvc := passwords.NewService(pool)
-
-	// LLM API key.
-	llmCred, err := pwSvc.GetCredentialByName(ctx, "anthropic-api-key")
-	if err != nil {
-		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
-	}
-
-	// API authentication key.
 	apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
 	if err != nil {
 		log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
@@ -59,67 +42,11 @@ func init() {
 		apiKey = apiKeyCred.Value
 	}
 
-	var p provider.Provider
-	model := os.Getenv("MODEL_NAME")
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
-	}
-	p = provider.NewAnthropic(llmCred.Value, model)
-
-	// Build system prompt from Settings App + Notes App.
-	systemPrompt := buildPrompt(ctx, pool)
-
-	// Notes service for memory_save tool (created per-session in createFn).
-	notesSvc := notes.NewService(pool)
-
-	createFn := func(s *chat.Session) *agent.Agent {
-		// Build tool registry per session because MemorySaveTool needs the session ID.
-		registry := tool.NewRegistry()
-		registry.Register(&tool.TimeTool{})
-		registry.Register(&tool.ArithmeticTool{})
-		registry.Register(&tool.ReadFileTool{})
-		// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
-		// use ExecCommand to access DSQL credentials and compromise the database.
-		registry.Register(&tool.ExecCommandTool{})
-		registry.Register(&tool.WriteFileTool{})
-		registry.Register(&tool.EditFileTool{})
-		registry.Register(&tool.MemorySaveTool{
-			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
-			SessionID: s.ID,
-		})
-
-		return agent.NewFromContext(
-			p, systemPrompt, registry, 128000,
-			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		)
-	}
-
-	svc = chat.NewService(pool, createFn, nil)
-}
-
-// buildPrompt reads SOUL and USER from Settings App, memories from Notes App,
-// and assembles the system prompt. Called once on cold-start.
-func buildPrompt(ctx context.Context, pool *pgxpool.Pool) string {
-	settingsSvc := settings.NewService(pool)
-	notesSvc := notes.NewService(pool)
-
-	var cfg agent.PromptConfig
-
-	if soul, err := settingsSvc.GetPromptSetting(ctx, "soul"); err == nil {
-		cfg.Soul = soul.Value
-	}
-	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
-		cfg.User = user.Value
-	}
-	if memories, err := notesSvc.FormatForPrompt(ctx, agent.DefaultCharLimits().Memories); err == nil {
-		cfg.Memories = memories
-	}
-
-	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
+	// Session CRUD doesn't need LLM provider or tools, pass nil for createFn.
+	svc = chat.NewService(pool, nil, nil)
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	// Authenticate if API key is configured.
 	if apiKey != "" && req.Headers["x-api-key"] != apiKey {
 		return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	}
@@ -132,17 +59,12 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		return handleCreateSession(ctx, req)
 	case method == "GET" && path == "/sessions":
 		return handleListSessions(ctx)
-	case method == "GET" && strings.HasPrefix(path, "/sessions/") && !strings.Contains(path, "/reply"):
+	case method == "GET" && strings.HasPrefix(path, "/sessions/"):
 		id := strings.TrimPrefix(path, "/sessions/")
 		return handleGetSession(ctx, id)
 	case method == "DELETE" && strings.HasPrefix(path, "/sessions/"):
 		id := strings.TrimPrefix(path, "/sessions/")
 		return handleDeleteSession(ctx, id)
-	case method == "POST" && strings.HasSuffix(path, "/reply"):
-		parts := strings.Split(strings.Trim(path, "/"), "/")
-		if len(parts) >= 3 {
-			return handleReply(ctx, parts[1], req)
-		}
 	}
 
 	return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
@@ -185,21 +107,6 @@ func handleDeleteSession(ctx context.Context, id string) (events.APIGatewayV2HTT
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusOK, map[string]string{"status": "deleted"})
-}
-
-func handleReply(ctx context.Context, sessionID string, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	var body struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
-		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-	}
-
-	reply, err := svc.Reply(ctx, sessionID, body.Text)
-	if err != nil {
-		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-	return jsonResponse(http.StatusOK, map[string]string{"reply": reply})
 }
 
 func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error) {

@@ -14,7 +14,7 @@ exports[`snapshot 1`] = `
   },
   "Outputs": {
     "ApiUrl": {
-      "Description": "API Gateway endpoint",
+      "Description": "API Gateway endpoint (session CRUD)",
       "Value": {
         "Fn::Join": [
           "",
@@ -40,6 +40,15 @@ exports[`snapshot 1`] = `
       "Condition": "ShouldGenerateApiKey",
       "Description": "SAVE THIS NOW. Use it in the x-api-key header for all API requests.",
       "Value": "00000000-0000-0000-0000-000000000000",
+    },
+    "ReplyUrl": {
+      "Description": "Function URL endpoint (reply/agent)",
+      "Value": {
+        "Fn::GetAtt": [
+          "ReplyHandlerFunctionUrlE3C0AFE2",
+          "FunctionUrl",
+        ],
+      },
     },
   },
   "Parameters": {
@@ -99,7 +108,7 @@ exports[`snapshot 1`] = `
           ],
         },
         "Runtime": "provided.al2023",
-        "Timeout": 300,
+        "Timeout": 30,
       },
       "Type": "AWS::Lambda::Function",
     },
@@ -489,6 +498,141 @@ exports[`snapshot 1`] = `
         ],
       },
       "Type": "AWS::IAM::Role",
+    },
+    "ReplyHandlerED1A6F38": {
+      "DependsOn": [
+        "ReplyHandlerServiceRoleDefaultPolicy29B9895A",
+        "ReplyHandlerServiceRoleD8F4E3D7",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "[ASSET HASH].zip",
+        },
+        "Environment": {
+          "Variables": {
+            "DSQL_ENDPOINT": {
+              "Fn::GetAtt": [
+                "DsqlCluster",
+                "Endpoint",
+              ],
+            },
+          },
+        },
+        "Handler": "bootstrap",
+        "MemorySize": 512,
+        "Role": {
+          "Fn::GetAtt": [
+            "ReplyHandlerServiceRoleD8F4E3D7",
+            "Arn",
+          ],
+        },
+        "Runtime": "provided.al2023",
+        "Timeout": 900,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "ReplyHandlerFunctionUrlE3C0AFE2": {
+      "Properties": {
+        "AuthType": "NONE",
+        "TargetFunctionArn": {
+          "Fn::GetAtt": [
+            "ReplyHandlerED1A6F38",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "AWS::Lambda::Url",
+    },
+    "ReplyHandlerServiceRoleD8F4E3D7": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "ReplyHandlerServiceRoleDefaultPolicy29B9895A": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "dsql:DbConnectAdmin",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DsqlCluster",
+                  "ResourceArn",
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "ReplyHandlerServiceRoleDefaultPolicy29B9895A",
+        "Roles": [
+          {
+            "Ref": "ReplyHandlerServiceRoleD8F4E3D7",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "ReplyHandlerinvokefunction905AA8E1": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "ReplyHandlerED1A6F38",
+            "Arn",
+          ],
+        },
+        "InvokedViaFunctionUrl": true,
+        "Principal": "*",
+      },
+      "Type": "AWS::Lambda::Permission",
+    },
+    "ReplyHandlerinvokefunctionurl02CBCC23": {
+      "Properties": {
+        "Action": "lambda:InvokeFunctionUrl",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "ReplyHandlerED1A6F38",
+            "Arn",
+          ],
+        },
+        "FunctionUrlAuthType": "NONE",
+        "Principal": "*",
+      },
+      "Type": "AWS::Lambda::Permission",
     },
     "RunMigrations": {
       "DeletionPolicy": "Delete",

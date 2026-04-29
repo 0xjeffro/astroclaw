@@ -34,18 +34,21 @@ type Backend interface {
 	Reply(ctx context.Context, sessionID, text string) (string, error)
 }
 
-// remoteBackend talks to the deployed API Gateway via HTTP.
+// remoteBackend talks to the deployed APIs via HTTP.
+// API Gateway handles session CRUD, Function URL handles reply.
 type remoteBackend struct {
-	baseURL string
-	apiKey  string
-	client  *http.Client
+	apiURL   string // API Gateway URL for session CRUD
+	replyURL string // Function URL for reply (no 30s timeout)
+	apiKey   string
+	client   *http.Client
 }
 
-func newRemoteBackend(baseURL, apiKey string) *remoteBackend {
+func newRemoteBackend(apiURL, replyURL, apiKey string) *remoteBackend {
 	return &remoteBackend{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		client:  &http.Client{},
+		apiURL:   strings.TrimRight(apiURL, "/"),
+		replyURL: strings.TrimRight(replyURL, "/"),
+		apiKey:   apiKey,
+		client:   &http.Client{},
 	}
 }
 
@@ -87,7 +90,7 @@ func (r *remoteBackend) GetSession(ctx context.Context, id string) (*chat.Sessio
 }
 
 func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", r.baseURL+"/sessions/"+id, nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", r.apiURL+"/sessions/"+id, nil)
 	if err != nil {
 		return err
 	}
@@ -106,7 +109,7 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 
 func (r *remoteBackend) Reply(ctx context.Context, sessionID, text string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"text": text})
-	resp, err := r.post(ctx, "/sessions/"+sessionID+"/reply", body)
+	resp, err := r.postTo(ctx, r.replyURL, "/sessions/"+sessionID+"/reply", body)
 	if err != nil {
 		return "", err
 	}
@@ -120,7 +123,7 @@ func (r *remoteBackend) Reply(ctx context.Context, sessionID, text string) (stri
 }
 
 func (r *remoteBackend) get(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", r.baseURL+path, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", r.apiURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +144,11 @@ func (r *remoteBackend) get(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (r *remoteBackend) post(ctx context.Context, path string, body []byte) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", r.baseURL+path, bytes.NewReader(body))
+	return r.postTo(ctx, r.apiURL, path, body)
+}
+
+func (r *remoteBackend) postTo(ctx context.Context, baseURL, path string, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -173,9 +180,14 @@ func main() {
 
 	var backend Backend
 
-	// Remote mode: connect to deployed API Gateway.
+	// Remote mode: connect to deployed APIs.
+	// API_URL for session CRUD (API Gateway), REPLY_URL for reply (Function URL).
 	if apiURL := os.Getenv("API_URL"); apiURL != "" {
-		backend = newRemoteBackend(apiURL, os.Getenv("API_KEY"))
+		replyURL := os.Getenv("REPLY_URL")
+		if replyURL == "" {
+			log.Fatal("REPLY_URL must be set when using remote mode")
+		}
+		backend = newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
 		fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
 	} else {
 		// Local mode: connect to local or container database.

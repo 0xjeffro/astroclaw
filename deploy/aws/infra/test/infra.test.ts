@@ -51,16 +51,25 @@ test('API Lambda has correct runtime and architecture', () => {
   });
 });
 
-// Verifies the Migrate Lambda has a longer timeout.
-test('Migrate Lambda exists with 5 min timeout', () => {
+// Verifies Lambda timeouts match their roles:
+// API Lambda: 30s (simple CRUD), Reply Lambda: 15min (agent loop), Migrate Lambda: 5min (migrations).
+test('Lambda timeouts are configured correctly', () => {
   const template = createTemplate();
-  // Both Lambdas have 5 min timeout, so at least 2 should match.
-  const resources = template.findResources('AWS::Lambda::Function', {
-    Properties: {
-      Timeout: 300,
-    },
+
+  // API Lambda: 30 seconds
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Timeout: 30,
   });
-  expect(Object.keys(resources).length).toBeGreaterThanOrEqual(2);
+
+  // Reply Lambda: 15 minutes
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Timeout: 900,
+  });
+
+  // Migrate Lambda: 5 minutes
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Timeout: 300,
+  });
 });
 
 // Verifies API Gateway HTTP API is created.

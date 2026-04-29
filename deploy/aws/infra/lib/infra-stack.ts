@@ -89,12 +89,49 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
       },
-      // TODO: API Gateway HTTP API has a 30-second max timeout. Agent loop (multiple
-      // LLM calls + tool executions) can exceed this. Need async pattern, WebSocket,
-      // or Lambda response streaming for long-running interactions.
-      // https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html
-      timeout: cdk.Duration.minutes(5),
+      timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+    });
+
+    // Reply Lambda: handles /reply requests with agent loop + LLM calls.
+    // Uses Function URL instead of API Gateway to avoid the 30-second timeout.
+    // https://docs.aws.amazon.com/lambda/latest/dg/urls-invocation.html
+    const replyHandler = new lambda.Function(this, 'ReplyHandler', {
+      runtime: lambda.Runtime.PROVIDED_AL2023,
+      handler: 'bootstrap',
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(projectRoot, {
+        bundling: {
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                execSync(
+                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/reply`,
+                    { cwd: projectRoot, stdio: 'inherit' },
+                );
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
+          command: [
+            'bash', '-c',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/reply',
+          ],
+        },
+      }),
+      environment: {
+        DSQL_ENDPOINT: cluster.attrEndpoint,
+      },
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 512,
+    });
+
+    // Function URL for Reply Lambda (no API Gateway timeout limit).
+    const replyUrl = replyHandler.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
     });
 
     const migrateHandler = new lambda.Function(this, 'MigrateHandler', {
@@ -146,6 +183,12 @@ export class InfraStack extends cdk.Stack {
       resources: [cluster.attrResourceArn],
     }));
 
+    // Reply Lambda: same as API Lambda for now.
+    replyHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
+
     // Migrate Lambda: needs DDL access for CREATE TABLE, ALTER TABLE, etc.
     migrateHandler.addToRolePolicy(new iam.PolicyStatement({
       actions: ['dsql:DbConnectAdmin'],
@@ -186,7 +229,12 @@ export class InfraStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url!,
-      description: 'API Gateway endpoint',
+      description: 'API Gateway endpoint (session CRUD)',
+    });
+
+    new cdk.CfnOutput(this, 'ReplyUrl', {
+      value: replyUrl.url,
+      description: 'Function URL endpoint (reply/agent)',
     });
 
     new cdk.CfnOutput(this, 'GeneratedApiKey', {
