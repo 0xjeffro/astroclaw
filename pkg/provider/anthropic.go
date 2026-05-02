@@ -7,83 +7,133 @@ package provider
 //   - Tool Use:     https://docs.anthropic.com/en/docs/build-with-claude/tool-use
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
+
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
 type Anthropic struct {
-	APIKey  string
-	BaseURL string
-	Model   string
-	HTTP    *http.Client
+	client anthropic.Client
+	model  string
 }
 
 func NewAnthropic(apiKey, model string) *Anthropic {
-	return &Anthropic{
-		APIKey:  apiKey,
-		BaseURL: "https://api.anthropic.com",
-		Model:   model,
-		HTTP:    &http.Client{Timeout: 60 * time.Second},
-	}
+	client := anthropic.NewClient(option.WithAPIKey(apiKey))
+	return &Anthropic{client: client, model: model}
 }
 
-func (a *Anthropic) Chat(ctx context.Context, msgs []Message, tools []Tool) (Message, error) {
-
+func (a *Anthropic) ChatStream(ctx context.Context, msgs []Message, tools []Tool) (<-chan StreamEvent, error) {
 	// Extract system messages into a top-level "system" field, since
 	// Anthropic doesn't accept `system` as a message role.
 	system, chatMsgs := extractSystem(msgs)
 
-	// Convert our Message format → Anthropic's content-block-based format.
-	anthropicMsgs := toAnthropicMessages(chatMsgs)
-
-	// Convert out Tool format -> Anthropic tool format
-	anthropicTools := toAnthropicTools(tools)
-
-	// Build request body
-	body := map[string]any{
-		"model":      a.Model,
-		"max_tokens": 4096,
-		"messages":   anthropicMsgs,
+	// Convert our Message format → Anthropic's SDK Message.
+	params := anthropic.MessageNewParams{
+		Model: a.model,
+		// TODO: make this configurable per model. Different models have different
+		// maximum values (e.g. Claude Sonnet 16384, Haiku 4096).
+		// https://docs.claude.com/en/docs/models-overview
+		MaxTokens: 4096,
+		Messages:  toSDKMessages(chatMsgs),
 	}
 	if system != "" {
-		body["system"] = system
+		params.System = []anthropic.TextBlockParam{
+			{Text: system},
+		}
 	}
-	if len(anthropicTools) > 0 {
-		body["tools"] = anthropicTools
+	if len(tools) > 0 {
+		params.Tools = toSDKTools(tools)
 	}
+	stream := a.client.Messages.NewStreaming(ctx, params)
 
-	reqBody, err := json.Marshal(body)
-	if err != nil {
-		return Message{}, fmt.Errorf("failed to marshal anthropic request body: %w", err)
-	}
+	ch := make(chan StreamEvent)
+	go func() {
+		defer close(ch)
+		defer func() { _ = stream.Close() }()
 
-	// Send HTTP request.
-	req, err := http.NewRequestWithContext(ctx, "POST", a.BaseURL+"/v1/messages", bytes.NewReader(reqBody))
-	if err != nil {
-		return Message{}, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", a.APIKey)             // Anthropic uses x-api-key, not Authorization Bearer
-	req.Header.Set("anthropic-version", "2023-06-01") // Required version header
+		// send pushes an event to the channel or returns false if the
+		// context was cancelled (e.g. user disconnected). This prevents
+		// the goroutine from blocking forever on a full channel.
+		send := func(e StreamEvent) bool {
+			select {
+			case ch <- e:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
 
-	resp, err := doWithRetry(a.HTTP, req, reqBody)
-	if err != nil {
-		return Message{}, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+		var currentToolCallID string
 
-	if resp.StatusCode != http.StatusOK {
-		errBody, _ := io.ReadAll(resp.Body)
-		return Message{}, fmt.Errorf("anthropic request failed with status code %d: %s", resp.StatusCode, string(errBody))
-	}
+		for stream.Next() {
+			event := stream.Current()
+			switch variant := event.AsAny().(type) {
+			case anthropic.ContentBlockStartEvent:
+				switch block := variant.ContentBlock.AsAny().(type) {
+				case anthropic.ToolUseBlock:
+					currentToolCallID = block.ID
+					if !send(StreamEvent{
+						Type:       StreamEventToolCallStart,
+						ToolCallID: block.ID,
+						ToolName:   block.Name,
+					}) {
+						return
+					}
+				case anthropic.TextBlock:
+					// Text content arrives via TextDelta in ContentBlockDeltaEvent.
+				case anthropic.ThinkingBlock:
+					// Thinking content arrives via ThinkingDelta in ContentBlockDeltaEvent.
 
-	// Parse Anthropic response -> our Message format
-	return parseAnthropicResponse(resp.Body)
+					// Anthropic server tools (web_search, web_fetch, code_execution) produce
+					// additional block types (ServerToolUseBlock, WebSearchToolResultBlock, etc.)
+					// that are not handled here. Bedrock does not support server tools, so we
+					// skip them for now to keep Bedrock compatibility.
+					// https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview#server-tools
+				}
+
+			case anthropic.ContentBlockDeltaEvent:
+				switch delta := variant.Delta.AsAny().(type) {
+				case anthropic.TextDelta:
+					if !send(StreamEvent{Type: StreamEventTextDelta, Text: delta.Text}) {
+						return
+					}
+				case anthropic.InputJSONDelta:
+					if !send(StreamEvent{
+						Type:       StreamEventToolCallDelta,
+						ToolCallID: currentToolCallID,
+						Arguments:  delta.PartialJSON,
+					}) {
+						return
+					}
+				case anthropic.ThinkingDelta:
+					if !send(StreamEvent{Type: StreamEventThinkingDelta, Thinking: delta.Thinking}) {
+						return
+					}
+				}
+			case anthropic.ContentBlockStopEvent:
+				if currentToolCallID != "" {
+					if !send(StreamEvent{Type: StreamEventToolCallEnd, ToolCallID: currentToolCallID}) {
+						return
+					}
+					currentToolCallID = ""
+				}
+			case anthropic.MessageDeltaEvent:
+				// TODO: currently only "end_turn" and "tool_use" are handled by the agent loop.
+				// Other stop reasons (max_tokens, stop_sequence, pause_turn, refusal)
+				// may need specific handling in the future.
+				if !send(StreamEvent{Type: StreamEventDone, StopReason: string(variant.Delta.StopReason)}) {
+					return
+				}
+			}
+		}
+		if err := stream.Err(); err != nil {
+			send(StreamEvent{Type: StreamEventError, Error: err.Error()})
+		}
+	}()
+
+	return ch, nil
 }
 
 // extractSystem pulls out system messages from the msg slice and returns
@@ -104,165 +154,84 @@ func extractSystem(msgs []Message) (string, []Message) {
 	return system, chatMsgs
 }
 
-// toAnthropicMessages converts our Message slice into Anthropic's message
-// format. Key differences:
-//   - content is an array of blocks, not a plain string
-//   - tool calls are {type:"tool_use"} blocks inside content
-//   - tool results are {role:"user"} with {type:"tool_result"} blocks
-func toAnthropicMessages(msgs []Message) []map[string]any {
-	var out []map[string]any
+// toSDKMessages converts iclaw Messages to Anthropic SDK MessageParam slice.
+// Key differences from iclaw's format:
+//   - Content is an array of typed blocks, not a plain string
+//   - Tool calls are ToolUseBlock inside assistant message content
+//   - Tool results must be inside a user message; consecutive tool results
+//     are merged into a single user message (Anthropic requirement)
+func toSDKMessages(msgs []Message) []anthropic.MessageParam {
+	var out []anthropic.MessageParam
 	for _, m := range msgs {
 		switch {
-		// Case 1: Tool result.
-		// Ours: {role:"tool", tool_call_id:"xxx", content:"result"}
-		// Anthropic: {role:"user", content:[{type:"tool_result", tool_use_id:"xxx", content: "result"}]}
 		case m.Role == "tool":
-			out = appendToolResult(out, m)
+			block := anthropic.NewToolResultBlock(m.ToolCallID, m.Content, false)
+			// Merge consecutive tool results into the same user message.
+			if len(out) > 0 && out[len(out)-1].Role == "user" {
+				out[len(out)-1].Content = append(out[len(out)-1].Content, block)
+			} else {
+				out = append(out, anthropic.NewUserMessage(block))
+			}
 
-		// Case 2: Assistant message containing tool calls.
-		// Ours:      {role:"assistant", content:"", tool_calls:[{id, function:{name, arguments}}]}
-		// Anthropic: {role:"assistant", content:[{type:"tool_use", id, name, input}]}
 		case m.Role == "assistant" && len(m.ToolCalls) > 0:
-			out = append(out, buildAssistantWithToolCalls(m))
+			var blocks []anthropic.ContentBlockParamUnion
+			if m.Content != "" {
+				blocks = append(blocks, anthropic.NewTextBlock(m.Content))
+			}
+			for _, tc := range m.ToolCalls {
+				var input any
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
+					input = map[string]any{}
+				}
+				blocks = append(blocks, anthropic.NewToolUseBlock(tc.ID, input, tc.Function.Name))
+			}
+			out = append(out, anthropic.MessageParam{Role: "assistant", Content: blocks})
 
-		// Case 3: Plain user or assistant message (text only).
-		// Ours: {role:"user", content:"hello"}
-		// Anthropic: {role:"user", content:[{type:"text", text: "hello"}]}
-		default:
-			out = append(out, map[string]any{
-				"role": m.Role,
-				"content": []map[string]any{
-					{"type": "text", "text": m.Content},
-				},
-			})
+		case m.Role == "user":
+			out = append(out, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
+
+		case m.Role == "assistant":
+			out = append(out, anthropic.NewAssistantMessage(anthropic.NewTextBlock(m.Content)))
 		}
 	}
-
 	return out
 }
 
-// appendToolResult handles converting {role:"tool"} messages to Anthropic format.
-// Anthropic requires tool results to be inside a {role:"user"} message.
-// If the previous message is already a user message (from an earlier tool result in the same batch),
-// we merge into it. Otherwise, we create a new user message.
-func appendToolResult(out []map[string]any, m Message) []map[string]any {
-	block := map[string]any{
-		"type":        "tool_result",
-		"tool_use_id": m.ToolCallID,
-		"content":     m.Content,
-	}
-
-	// Try to merge into the previous user message (multiple tool results
-	// from parallel tool calls should be in the same user message).
-	if len(out) > 0 {
-		prev := out[len(out)-1]
-		if prev["role"] == "user" {
-			if content, ok := prev["content"].([]map[string]any); ok {
-				prev["content"] = append(content, block)
-				return out
-			}
-		}
-	}
-
-	return append(out, map[string]any{
-		"role":    "user",
-		"content": []map[string]any{block},
-	})
-}
-
-func buildAssistantWithToolCalls(m Message) map[string]any {
-	var content []map[string]any
-
-	if m.Content != "" {
-		content = append(content, map[string]any{
-			"type": "text",
-			"text": m.Content,
+// toSDKTools converts iclaw Tools to Anthropic SDK ToolUnionParam slice.
+func toSDKTools(tools []Tool) []anthropic.ToolUnionParam {
+	var out []anthropic.ToolUnionParam
+	for _, t := range tools {
+		out = append(out, anthropic.ToolUnionParam{
+			OfTool: &anthropic.ToolParam{
+				Name:        t.Function.Name,
+				Description: anthropic.String(t.Function.Description),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: t.Function.Parameters["properties"],
+					Required:   toStringSlice(t.Function.Parameters["required"]),
+				},
+			},
 		})
 	}
-
-	for _, tc := range m.ToolCalls {
-		// Parse arguments string back to JSON object — Anthropic expects
-		// input as a JSON object, not a string like OpenAI.
-		var input any
-		if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
-			input = map[string]any{}
-		}
-
-		content = append(content, map[string]any{
-			"type":  "tool_use",
-			"id":    tc.ID,
-			"name":  tc.Function.Name,
-			"input": input,
-		})
-	}
-
-	return map[string]any{
-		"role":    "assistant",
-		"content": content,
-	}
+	return out
 }
 
-// toAnthropicTools converts our Tool format → Anthropic tool format.
-// Anthropic uses {name, description, input_schema} (flat structure),
-// unlike OpenAI's {type:"function", function:{name, description, parameters}}.
-func toAnthropicTools(tools []Tool) []map[string]any {
-	if len(tools) == 0 {
+// toStringSlice converts an any value (expected to be []string or []any)
+// to []string. Returns nil if conversion fails.
+func toStringSlice(v any) []string {
+	if v == nil {
 		return nil
 	}
-	var out []map[string]any
-	for _, t := range tools {
-		out = append(out, map[string]any{
-			"name":         t.Function.Name,
-			"description":  t.Function.Description,
-			"input_schema": t.Function.Parameters,
-		})
+	if ss, ok := v.([]string); ok {
+		return ss
 	}
-	return out
-}
-
-// parseAnthropicResponse reads the Anthropic response body and converts
-// it into our Message format. Anthropic's response.content is an array of blocks,
-// we extract text blocks into Content and tool_use blocks into ToolCalls.
-func parseAnthropicResponse(body io.Reader) (Message, error) {
-	var resp struct {
-		Content []struct {
-			Type  string          `json:"type"`
-			Text  string          `json:"text"`  // for type=="text"
-			ID    string          `json:"id"`    // for type=="tool_use"
-			Name  string          `json:"name"`  // for type=="tool_use"
-			Input json.RawMessage `json:"input"` // for type=="tool_use"
-		} `json:"content"`
-		StopReason string `json:"stop_reason"`
-	}
-
-	if err := json.NewDecoder(body).Decode(&resp); err != nil {
-		return Message{}, fmt.Errorf("decode response: %w", err)
-	}
-
-	var msg Message
-	msg.Role = "assistant"
-
-	for _, block := range resp.Content {
-		switch block.Type {
-		case "text":
-			msg.Content += block.Text
-		case "tool_use":
-			// Convert input (JSON object) back to string for our ToolCall format.
-			argsStr := "{}"
-			if len(block.Input) > 0 {
-				argsStr = string(block.Input)
+	if arr, ok := v.([]any); ok {
+		var out []string
+		for _, item := range arr {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
 			}
-
-			msg.ToolCalls = append(msg.ToolCalls, ToolCall{
-				ID:   block.ID,
-				Type: "function",
-				Function: ToolCallFunc{
-					Name:      block.Name,
-					Arguments: argsStr,
-				},
-			})
 		}
+		return out
 	}
-
-	return msg, nil
+	return nil
 }

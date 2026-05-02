@@ -107,6 +107,8 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 	return nil
 }
 
+// Reply TODO: implement streaming for remote mode. Currently waits for the full
+// response before returning, so the user sees no output until it's complete.
 func (r *remoteBackend) Reply(ctx context.Context, sessionID, text string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"text": text})
 	resp, err := r.postTo(ctx, r.replyURL, "/sessions/"+sessionID+"/reply", body)
@@ -261,12 +263,14 @@ func main() {
 		case input == "":
 			continue
 		default:
-			reply, err := backend.Reply(ctx, currentSession, input)
+			_, err := backend.Reply(ctx, currentSession, input)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
-			fmt.Println(reply)
+			// In local mode, OnTextDelta already printed the response
+			// token by token. Just add a newline to finish.
+			fmt.Println()
 		}
 	}
 }
@@ -286,6 +290,9 @@ func initLocalBackend(ctx context.Context) *chat.Service {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	configFn := func(a *agent.Agent) {
+		a.OnTextDelta = func(text string) {
+			fmt.Print(text)
+		}
 		a.OnToolCall = func(id string, name string, args string) {
 			_, _ = fmt.Fprintf(os.Stderr, "⚡ [%s] calling %s(%s)\n", id, name, args)
 		}

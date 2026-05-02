@@ -6,18 +6,21 @@ import (
 	"testing"
 )
 
-// OPENAI_API_KEY=sk-xxx go test ./pkg/provider/ -v -run TestOpenAIChat
-func TestOpenAIChat(t *testing.T) {
+// OPENAI_API_KEY=sk-xxx go test ./pkg/provider/ -v -run TestOpenAIChatStream
+func TestOpenAIChatStream(t *testing.T) {
 	key := os.Getenv("OPENAI_API_KEY")
 	if key == "" {
 		t.Skip("OPENAI_API_KEY not set")
 	}
 	o := NewOpenAI(key, "gpt-4o-mini")
-	got, err := o.Chat(context.Background(), []Message{
+	msg, err := ChatSync(context.Background(), o, []Message{
 		{Role: "user", Content: "say hi in 3 words"},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("got: %+v", got)
+	if msg.Content == "" {
+		t.Error("expected non-empty content")
+	}
+	t.Logf("got: %+v", msg)
 }

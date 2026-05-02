@@ -275,7 +275,7 @@ func (a *Agent) summarizeSingle(ctx context.Context, msgs []provider.Message) (s
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		text := formatForSummary(msgs)
-		reply, err := a.provider.Chat(ctx, []provider.Message{
+		reply, err := provider.ChatSync(ctx, a.provider, []provider.Message{
 			{Role: "system", Content: prompt},
 			{Role: "user", Content: "CONVERSATION:\n" + text},
 		}, nil) // nil tools, so model can't call any
@@ -313,7 +313,7 @@ func (a *Agent) summarizeBatch(ctx context.Context, part1, part2 []provider.Mess
 		return "", err
 	}
 
-	reply, err := a.provider.Chat(ctx, []provider.Message{
+	reply, err := provider.ChatSync(ctx, a.provider, []provider.Message{
 		{Role: "system", Content: mergePrompt},
 		{Role: "user", Content: fmt.Sprintf("Summary 1:\n%s\n\nSummary 2:\n%s", sum1, sum2)},
 	}, nil)

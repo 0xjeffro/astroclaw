@@ -1,6 +1,9 @@
 package provider
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // Message represents a single message in the conversation history.
 // Role determines the message type and how each Provider translates it:
@@ -44,5 +47,54 @@ type ToolFunction struct {
 }
 
 type Provider interface {
-	Chat(ctx context.Context, msgs []Message, tools []Tool) (Message, error)
+	ChatStream(ctx context.Context, msgs []Message, tools []Tool) (<-chan StreamEvent, error)
+}
+
+// ChatSync consumes a ChatStream channel and assembles the events into a complete Message.
+// Use this when streaming output is not needed (e.g., wen summarization we don't need streaming).
+func ChatSync(ctx context.Context, p Provider, msgs []Message, tools []Tool) (Message, error) {
+	ch, err := p.ChatStream(ctx, msgs, tools)
+	if err != nil {
+		return Message{}, err
+	}
+
+	var msg Message
+	msg.Role = "assistant"
+
+	// An LLM response may contain multiple tool calls. Each tool call's
+	// arguments arrive as a series of JSON fragments (tool_call_delta events).
+	// toolCalls stores ToolCall structs in the order they started.
+	// toolArgs accumulates the JSON fragments per tool call ID until tool_call_end.
+	var toolCalls []ToolCall
+	toolArgs := map[string]string{}
+
+	for event := range ch {
+		switch event.Type {
+		case StreamEventTextDelta:
+			msg.Content += event.Text
+		case StreamEventToolCallStart:
+			toolCalls = append(toolCalls, ToolCall{
+				ID:   event.ToolCallID,
+				Type: "function",
+				Function: ToolCallFunc{
+					Name: event.ToolName,
+				},
+			})
+			toolArgs[event.ToolCallID] = ""
+		case StreamEventToolCallDelta:
+			toolArgs[event.ToolCallID] += event.Arguments
+		case StreamEventToolCallEnd:
+			for i := range toolCalls {
+				if toolCalls[i].ID == event.ToolCallID {
+					toolCalls[i].Function.Arguments = toolArgs[event.ToolCallID]
+					break
+				}
+			}
+		case StreamEventError:
+			return Message{}, fmt.Errorf("stream error: %s", event.Error)
+		}
+	}
+
+	msg.ToolCalls = toolCalls
+	return msg, nil
 }

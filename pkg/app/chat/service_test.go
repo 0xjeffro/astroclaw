@@ -81,14 +81,32 @@ type fakeProvider struct {
 	gotMsgs   []provider.Message
 }
 
-func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message, _ []provider.Tool) (provider.Message, error) {
+func (f *fakeProvider) ChatStream(_ context.Context, msgs []provider.Message, _ []provider.Tool) (<-chan provider.StreamEvent, error) {
 	f.gotMsgs = msgs
+	var reply provider.Message
 	if f.calls >= len(f.responses) {
-		return provider.Message{Role: "assistant", Content: "default reply"}, nil
+		reply = provider.Message{Role: "assistant", Content: "default reply"}
+	} else {
+		reply = f.responses[f.calls]
+		f.calls++
 	}
-	r := f.responses[f.calls]
-	f.calls++
-	return r, nil
+
+	ch := make(chan provider.StreamEvent, len(reply.ToolCalls)*3+2)
+	if reply.Content != "" {
+		ch <- provider.StreamEvent{Type: provider.StreamEventTextDelta, Text: reply.Content}
+	}
+	for _, tc := range reply.ToolCalls {
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallStart, ToolCallID: tc.ID, ToolName: tc.Function.Name}
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallDelta, ToolCallID: tc.ID, Arguments: tc.Function.Arguments}
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallEnd, ToolCallID: tc.ID}
+	}
+	stopReason := "end_turn"
+	if len(reply.ToolCalls) > 0 {
+		stopReason = "tool_use"
+	}
+	ch <- provider.StreamEvent{Type: provider.StreamEventDone, StopReason: stopReason}
+	close(ch)
+	return ch, nil
 }
 
 const testUserID = "00000000-0000-0000-0000-000000000001"

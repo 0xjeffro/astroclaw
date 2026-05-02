@@ -27,8 +27,8 @@ func (f *fakeTool) Execute(_ context.Context, args string) (string, error) { ret
 func (f *fakeTool) Approval() bool                                         { return f.needsApproval }
 func (f *fakeTool) Workspace() bool                                        { return false }
 
-// fakeResponse is one entry in a fakeProvider's scripted responses. Each
-// call to Chat consumes one response: a non-nil err means that the call fails,
+// fakeResponse is a scripted response in fakeProvider. Each
+// call to ChatStream consumes one response: a non-nil err means that the call fails,
 // otherwise the reply is returned.
 type fakeResponse struct {
 	reply provider.Message
@@ -40,29 +40,52 @@ type fakeResponse struct {
 // pre-queued script of responses and records the messages it received on
 // the most recent call.
 //
-// The script lets a single test cover multi-turn conversations: each Chat
-// call pops the next response in order. Calling Chat more times than the
-// script has entry panics — that's a test bug we want to surface loudly,
-// not silently mask by returning a zero value.
+// The script lets a single test cover multi-turn conversations: each ChatStream
+// call pops the next response in order.
+// If ChatStream is called more times than responses queued, it panics
+// instead of returning a zero value, so test bugs are caught immediately.
 type fakeProvider struct {
-	gotMsgs   []provider.Message // msgs from the MOST RECENT Chat call
+	gotMsgs   []provider.Message // msgs from the MOST RECENT ChatStream call
 	responses []fakeResponse     // scripted responses, consumed in order
-	calls     int                // number of Chat calls so far
+	calls     int                // number of ChatStream calls so far
 }
 
-func (f *fakeProvider) Chat(_ context.Context, msgs []provider.Message, _ []provider.Tool) (provider.Message, error) {
+func (f *fakeProvider) ChatStream(_ context.Context, msgs []provider.Message, _ []provider.Tool) (<-chan provider.StreamEvent, error) {
 	f.gotMsgs = msgs
 	if f.calls >= len(f.responses) {
-		panic(fmt.Sprintf("fakeProvider: Chat called %d times, only %d responses queued", f.calls+1, len(f.responses)))
+		panic(fmt.Sprintf("fakeProvider: ChatStream called %d times, only %d responses queued", f.calls+1, len(f.responses)))
 	}
 	fr := f.responses[f.calls]
 	f.calls++
-	return fr.reply, fr.err
+
+	if fr.err != nil {
+		return nil, fr.err
+	}
+
+	// Convert the scripted Message into StreamEvents on a channel,
+	// simulating what a real streaming provider would do.
+	// Each tool call produces 3 events (start + delta + end), plus
+	// 1 for text content (if any), plus 1 for done.
+	ch := make(chan provider.StreamEvent, len(fr.reply.ToolCalls)*3+1+1)
+	if fr.reply.Content != "" {
+		ch <- provider.StreamEvent{Type: provider.StreamEventTextDelta, Text: fr.reply.Content}
+	}
+	for _, tc := range fr.reply.ToolCalls {
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallStart, ToolCallID: tc.ID, ToolName: tc.Function.Name}
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallDelta, ToolCallID: tc.ID, Arguments: tc.Function.Arguments}
+		ch <- provider.StreamEvent{Type: provider.StreamEventToolCallEnd, ToolCallID: tc.ID}
+	}
+	stopReason := "end_turn"
+	if len(fr.reply.ToolCalls) > 0 {
+		stopReason = "tool_use"
+	}
+	ch <- provider.StreamEvent{Type: provider.StreamEventDone, StopReason: stopReason}
+	close(ch)
+	return ch, nil
 }
 
 // TestAgentReply covers the happy path of Agent.Reply when a non-empty
-// system prompt is configured. It pins down three behaviors that together
-// describe the full contract of Reply in this branch:
+// system prompt is configured. It pins down three behaviors:
 //
 //  1. Reply must return whatever the underlying Provider returned, verbatim.
 //     The Agent is a transparent pass-through for the model output — it
@@ -115,14 +138,11 @@ func TestAgentReply(t *testing.T) {
 
 // TestAgentReply_EmptySystem covers the edge case where Agent is built with
 // an empty system prompt. The contract here is that Agent must NOT emit a
-// `{role:"system", content:""}` message in that case — empty system
+// `{role:"system", content:""}` message in that case cuz empty system
 // messages are garbage data that some models react to in surprising ways,
 // so Agent.Reply has an explicit `if a.system != ""` guard around the
 // system-message appended.
-//
-// This test exists specifically to lock that guard in place: if a future
-// refactor removes the `if`, this test will fail because gotMsgs would
-// contain two messages instead of one.
+
 func TestAgentReply_EmptySystem(t *testing.T) {
 	fp := &fakeProvider{responses: []fakeResponse{{reply: provider.Message{Role: "assistant", Content: "ok"}}}}
 	a := New(fp, "", nil, 0)
@@ -140,20 +160,9 @@ func TestAgentReply_EmptySystem(t *testing.T) {
 	}
 }
 
-// TestAgentReply_RemembersHistory verifies the core promise of Step 2:
-// Agent accumulates conversation history across Reply calls and replays it
-// on every subsequent call, so the model "remembers" earlier turns.
-//
-// The fake provider doesn't actually remember anything — what we're
-// pinning down is that on the SECOND call, msgs contains the entire prior
-// conversation (system + every previous user/assistant pair) followed by
-// the new user message. A real LLM with that input would be able to
-// answer "what is my name?" correctly.
-//
-// If a future refactor breaks the history (e.g. someone wires up a new
-// per-call slice instead of appending to a.history, or forgets to record
-// the assistant reply), this test will fail because the second call's
-// msgs will be too short or miss the prior turns.
+// TestAgentReply_RemembersHistory verifies that Agent accumulates conversation history across Reply calls.
+// On the second call, msgs sent to the provider should contain the full
+// prior conversation (system + all user/assistant turns) plus the new message.
 func TestAgentReply_RemembersHistory(t *testing.T) {
 	const system = "you are a helpful assistant"
 	fp := &fakeProvider{
@@ -210,14 +219,14 @@ func TestAgentReply_RemembersHistory(t *testing.T) {
 // when the Provider returns an error, Agent must NOT leave the new user
 // message stranded in history. Otherwise, on the next successful call,
 // msgs would contain two consecutive user messages with no assistant in
-// between — an illegal conversation shape that confuses many models.
+// between.
 //
 // The harder scenario this test covers is the one where history is
 // non-empty BEFORE the failing call: if rollback uses the wrong index or
 // removes the wrong element, it could silently corrupt earlier turns
 // instead of just removing the new user. So we run a successful turn 1
 // first, then make turn 2 fail, then assert that history is exactly what
-// it was after turn 1 — the same length, same contents.
+// it was after turn 1.
 func TestAgentReply_RollsBackOnError(t *testing.T) {
 	const system = "you are a helpful assistant"
 	boom := errors.New("provider boom")
@@ -251,17 +260,16 @@ func TestAgentReply_RollsBackOnError(t *testing.T) {
 	if len(a.history) != 2 {
 		t.Fatalf("after turn 2 failure: history len = %d, want 2 (user message should have been rolled back)", len(a.history))
 	}
-	// Most importantly: turn 1's content must still be intact. A buggy
+	// Turn 1's content must still be intact. A buggy
 	// rollback could remove the wrong element and silently corrupt the
-	// prior turn — this assertion catches that.
+	// prior turn and this assertion catches that.
 	if a.history[0].Content != "first" || a.history[1].Content != "ok" {
 		t.Errorf("history corrupted after rollback: %+v", a.history)
 	}
 }
 
 // TestApproval_Denied verifies that when OnApproval returns false, the tool
-// is NOT executed and the model receives a rejection message. This is the
-// core safety guarantee: if the user says no, nothing happens.
+// is NOT executed and the model receives a rejection message.
 func TestApproval_Denied(t *testing.T) {
 	// Set up a tool that needs approval and tracks if Execute was called.
 	executed := false

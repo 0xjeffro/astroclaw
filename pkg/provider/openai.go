@@ -26,7 +26,32 @@ func NewOpenAI(apiKey, model string) *OpenAI {
 	}
 }
 
-func (o *OpenAI) Chat(ctx context.Context, msgs []Message, tools []Tool) (Message, error) {
+// TODO: rewrite with OpenAI Go SDK and real streaming support.
+// This is a placeholder that wraps the old synchronous Chat into a channel.
+func (o *OpenAI) ChatStream(ctx context.Context, msgs []Message, tools []Tool) (<-chan StreamEvent, error) {
+	msg, err := o.chat(ctx, msgs, tools)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan StreamEvent, len(msg.ToolCalls)*3+2)
+	if msg.Content != "" {
+		ch <- StreamEvent{Type: StreamEventTextDelta, Text: msg.Content}
+	}
+	for _, tc := range msg.ToolCalls {
+		ch <- StreamEvent{Type: StreamEventToolCallStart, ToolCallID: tc.ID, ToolName: tc.Function.Name}
+		ch <- StreamEvent{Type: StreamEventToolCallDelta, ToolCallID: tc.ID, Arguments: tc.Function.Arguments}
+		ch <- StreamEvent{Type: StreamEventToolCallEnd, ToolCallID: tc.ID}
+	}
+	stopReason := "end_turn"
+	if len(msg.ToolCalls) > 0 {
+		stopReason = "tool_use"
+	}
+	ch <- StreamEvent{Type: StreamEventDone, StopReason: stopReason}
+	close(ch)
+	return ch, nil
+}
+
+func (o *OpenAI) chat(ctx context.Context, msgs []Message, tools []Tool) (Message, error) {
 	body := map[string]any{
 		"model":    o.Model,
 		"messages": msgs,

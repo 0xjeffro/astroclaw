@@ -20,13 +20,14 @@ type Agent struct {
 
 	OnToolCall   func(id string, toolName string, args string)   // called before tool execution, nil = silent
 	OnToolResult func(id string, toolName string, result string) // called after tool execution, nil = silent
+	OnTextDelta  func(text string)
 }
 
 func New(p provider.Provider, system string, tools *tool.Registry, contextWindow int) *Agent {
 	return &Agent{provider: p, system: system, tools: tools, contextWindow: contextWindow}
 }
 
-// NewFromContext creates an Agent with existing conversation context,
+// NewFromContext creates an Agent with an existing conversation context,
 // used when restoring a session. contextMessages is the Agent's compressed
 // working history, contextSummary is the LLM-generated summary of older turns.
 func NewFromContext(p provider.Provider, system string, tools *tool.Registry,
@@ -87,13 +88,53 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 		msgs = append(msgs, a.history...) // Add the entire history to the message list (including the userText this time).
 
 		// Call the provider with the full message list and tools.
-		reply, err := a.provider.Chat(ctx, msgs, providerTools)
+		ch, err := a.provider.ChatStream(ctx, msgs, providerTools)
 
 		if err != nil {
-			a.history = a.history[:historyLen] // Clear any messages added during this step, including the user message
+			// FIXME: historyLen was captured before context compression (summarize/forceCompress).
+			// If compression ran and shortened the history, historyLen points beyond the
+			// current slice length, causing a panic. Need to either update historyLen
+			// after compression, or use a different rollback strategy.
+			a.history = a.history[:historyLen]
 			return "", err
 		}
 
+		// Consume the stream and assemble the assistant's reply.
+		var reply provider.Message
+		reply.Role = "assistant"
+		var toolCalls []provider.ToolCall
+		toolArgs := map[string]string{}
+
+		for event := range ch {
+			switch event.Type {
+			case provider.StreamEventTextDelta:
+				reply.Content += event.Text
+				if a.OnTextDelta != nil {
+					a.OnTextDelta(event.Text)
+				}
+			case provider.StreamEventToolCallStart:
+				toolCalls = append(toolCalls, provider.ToolCall{
+					ID:   event.ToolCallID,
+					Type: "function",
+					Function: provider.ToolCallFunc{
+						Name: event.ToolName,
+					},
+				})
+				toolArgs[event.ToolCallID] = ""
+			case provider.StreamEventToolCallDelta:
+				toolArgs[event.ToolCallID] += event.Arguments
+			case provider.StreamEventToolCallEnd:
+				for i := range toolCalls {
+					if toolCalls[i].ID == event.ToolCallID {
+						toolCalls[i].Function.Arguments = toolArgs[event.ToolCallID]
+						break
+					}
+				}
+			case provider.StreamEventError:
+				return "", fmt.Errorf("stream error: %s", event.Error)
+			}
+		}
+		reply.ToolCalls = toolCalls
 		// Append the assistant's message to the history.
 		a.history = append(a.history, reply)
 
@@ -161,7 +202,7 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 // toProviderTools converts tool.Tool (internal, contains Run function) into
 // provider.Tool (serializable, sent to LLM). The Run function is stripped
 // because it cannot be serialized to JSON. Each Provider implementation
-// decides how to serialize the result, for example, OpenAI uses it as-is, Anthropic
+// decides how to serialize the result. For example, OpenAI uses it as-is, Anthropic
 // re-maps the fields to its own format inside Chat.
 func toProviderTools(reg *tool.Registry) []provider.Tool {
 	if reg == nil {
