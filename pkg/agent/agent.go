@@ -138,7 +138,11 @@ func (a *Agent) Reply(ctx context.Context, userText string) (string, error) {
 		// Append the assistant's message to the history.
 		a.history = append(a.history, reply)
 
-		// If the provider returned no tool calls, this is the last step.
+		// TODO: the agent loop currently ignores StopReason from StreamEventDone
+		// and decides whether to continue based on len(reply.ToolCalls). In the
+		// future, StopReason should be used to inform the user about specific
+		// conditions (e.g. max_tokens means the reply was truncated,
+		// content_filter means the response was blocked).
 		if len(reply.ToolCalls) == 0 {
 			return reply.Content, nil
 		}

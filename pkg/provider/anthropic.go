@@ -120,10 +120,17 @@ func (a *Anthropic) ChatStream(ctx context.Context, msgs []Message, tools []Tool
 					currentToolCallID = ""
 				}
 			case anthropic.MessageDeltaEvent:
-				// TODO: currently only "end_turn" and "tool_use" are handled by the agent loop.
-				// Other stop reasons (max_tokens, stop_sequence, pause_turn, refusal)
-				// may need specific handling in the future.
-				if !send(StreamEvent{Type: StreamEventDone, StopReason: string(variant.Delta.StopReason)}) {
+				raw := string(variant.Delta.StopReason)
+				stopReason := raw // pass through unrecognized values as-is
+				switch raw {
+				case "end_turn":
+					stopReason = StopReasonEndTurn
+				case "tool_use":
+					stopReason = StopReasonToolUse
+				case "max_tokens":
+					stopReason = StopReasonMaxTokens
+				}
+				if !send(StreamEvent{Type: StreamEventDone, StopReason: stopReason}) {
 					return
 				}
 			}
