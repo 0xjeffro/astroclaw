@@ -93,12 +93,12 @@ CREATE TABLE "public"."app_passwords_credentials" (
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id")
 );
--- Create "app_settings_prompt" table
-CREATE TABLE "public"."app_settings_prompt" (
+-- Create "app_settings_kv" table
+CREATE TABLE "public"."app_settings_kv" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "name" text NOT NULL,
   "value" text NOT NULL DEFAULT '',
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "app_settings_prompt_name_key" UNIQUE ("name")
+  CONSTRAINT "app_settings_kv_name_key" UNIQUE ("name")
 );

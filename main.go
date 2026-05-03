@@ -6,33 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iclaw/pkg/agent"
 	"iclaw/pkg/app/chat"
-	"iclaw/pkg/app/notes"
 	"iclaw/pkg/app/settings"
-	"iclaw/pkg/provider"
-	"iclaw/pkg/tool"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
-
-// Backend abstracts local (direct DB) and remote (HTTP API) modes.
-// Local mode uses chat.Service, remote mode uses HTTP calls to the API Gateway.
-type Backend interface {
-	NewSession(ctx context.Context, userID, title string) (*chat.Session, error)
-	ListSessions(ctx context.Context) ([]*chat.Session, error)
-	GetSession(ctx context.Context, id string) (*chat.Session, error)
-	SoftDeleteSession(ctx context.Context, id string) error
-	Reply(ctx context.Context, sessionID, text string) (string, error)
-}
 
 // remoteBackend talks to the deployed APIs via HTTP.
 // API Gateway handles session CRUD, Function URL handles reply.
@@ -52,8 +33,8 @@ func newRemoteBackend(apiURL, replyURL, apiKey string) *remoteBackend {
 	}
 }
 
-func (r *remoteBackend) NewSession(ctx context.Context, userID, title string) (*chat.Session, error) {
-	body, _ := json.Marshal(map[string]string{"user_id": userID, "title": title})
+func (r *remoteBackend) NewSession(ctx context.Context, userID string, agentIDs []string, title string) (*chat.Session, error) {
+	body, _ := json.Marshal(map[string]any{"user_id": userID, "agent_ids": agentIDs, "title": title})
 	resp, err := r.post(ctx, "/sessions", body)
 	if err != nil {
 		return nil, err
@@ -107,10 +88,24 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 	return nil
 }
 
+func (r *remoteBackend) GetSetting(ctx context.Context, name string) (string, error) {
+	resp, err := r.get(ctx, "/settings/"+name)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Value string `json:"Value"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return "", fmt.Errorf("parse setting response: %w", err)
+	}
+	return result.Value, nil
+}
+
 // Reply TODO: implement streaming for remote mode. Currently waits for the full
 // response before returning, so the user sees no output until it's complete.
-func (r *remoteBackend) Reply(ctx context.Context, sessionID, text string) (string, error) {
-	body, _ := json.Marshal(map[string]string{"text": text})
+func (r *remoteBackend) Reply(ctx context.Context, sessionID, agentID, text string) (string, error) {
+	body, _ := json.Marshal(map[string]string{"text": text, "agent_id": agentID})
 	resp, err := r.postTo(ctx, r.replyURL, "/sessions/"+sessionID+"/reply", body)
 	if err != nil {
 		return "", err
@@ -180,25 +175,25 @@ func (r *remoteBackend) setHeaders(req *http.Request) {
 func main() {
 	ctx := context.Background()
 
-	var backend Backend
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		log.Fatal("API_URL must be set")
+	}
+	replyURL := os.Getenv("REPLY_URL")
+	if replyURL == "" {
+		log.Fatal("REPLY_URL must be set")
+	}
+	backend := newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
+	fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
 
-	// Remote mode: connect to deployed APIs.
-	// API_URL for session CRUD (API Gateway), REPLY_URL for reply (Function URL).
-	if apiURL := os.Getenv("API_URL"); apiURL != "" {
-		replyURL := os.Getenv("REPLY_URL")
-		if replyURL == "" {
-			log.Fatal("REPLY_URL must be set when using remote mode")
-		}
-		backend = newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
-		fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
-	} else {
-		// Local mode: connect to local or container database.
-		backend = initLocalBackend(ctx)
-		fmt.Println("iClaw - type /exit to quit")
+	// Fetch default agent ID from settings.
+	defaultAgentID, err := backend.GetSetting(ctx, settings.SettingDefaultAgentID)
+	if err != nil {
+		log.Fatalf("failed to get default agent: %v", err)
 	}
 
-	// Create a default session on startup.
-	defaultSession, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", "default")
+	// Create a default session on startup with the default agent.
+	defaultSession, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -234,7 +229,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", title)
+			s, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", []string{defaultAgentID}, title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
@@ -263,7 +258,7 @@ func main() {
 		case input == "":
 			continue
 		default:
-			_, err := backend.Reply(ctx, currentSession, input)
+			_, err := backend.Reply(ctx, currentSession, defaultAgentID, input)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
@@ -273,110 +268,4 @@ func main() {
 			fmt.Println()
 		}
 	}
-}
-
-// initLocalBackend sets up the local mode with database connection,
-// LLM provider, tools, and chat service.
-func initLocalBackend(ctx context.Context) *chat.Service {
-	var p provider.Provider
-	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		p = provider.NewAnthropic(key, "claude-sonnet-4-20250514")
-	} else if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		p = provider.NewOpenAI(key, "gpt-4o-mini")
-	} else {
-		log.Fatal("OPENAI_API_KEY or ANTHROPIC_API_KEY must be set")
-	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	configFn := func(a *agent.Agent) {
-		a.OnTextDelta = func(text string) {
-			fmt.Print(text)
-		}
-		a.OnToolCall = func(id string, name string, args string) {
-			_, _ = fmt.Fprintf(os.Stderr, "⚡ [%s] calling %s(%s)\n", id, name, args)
-		}
-		a.OnToolResult = func(id string, name string, result string) {
-			_, _ = fmt.Fprintf(os.Stderr, "✓ [%s] %s → %s\n", id, name, result)
-		}
-		a.OnApproval = func(toolName string, args string) bool {
-			_, _ = fmt.Fprintf(os.Stderr, "⚠️  %s(%s)\nApprove? [y/N] ", toolName, args)
-			scanner.Scan()
-			return strings.ToLower(strings.TrimSpace(scanner.Text())) == "y"
-		}
-	}
-
-	var pool *pgxpool.Pool
-	if connStr := os.Getenv("DATABASE_URL"); connStr != "" {
-		var err error
-		pool, err = pgxpool.New(ctx, connStr)
-		if err != nil {
-			log.Fatalf("connect to database: %v", err)
-		}
-	} else {
-		fmt.Println("DATABASE_URL not set, starting temporary PostgreSQL container...")
-		migrationFiles, _ := filepath.Glob("migrations/*.sql")
-		sort.Strings(migrationFiles)
-		if len(migrationFiles) == 0 {
-			log.Fatal("no migration files found in migrations/")
-		}
-		pg, err := postgres.Run(ctx, "postgres:16",
-			postgres.WithDatabase("iclaw"),
-			postgres.WithUsername("iclaw"),
-			postgres.WithPassword("iclaw"),
-			postgres.WithInitScripts(migrationFiles...),
-			postgres.BasicWaitStrategies(),
-			postgres.WithSQLDriver("pgx"),
-		)
-		if err != nil {
-			log.Fatalf("start PostgreSQL container: %v", err)
-		}
-
-		connStr, _ := pg.ConnectionString(ctx, "sslmode=disable")
-		pool, err = pgxpool.New(ctx, connStr)
-		if err != nil {
-			log.Fatalf("connect to container database: %v", err)
-		}
-		fmt.Println("PostgreSQL container ready.")
-	}
-
-	// Build system prompt from Settings App + Notes App.
-	settingsSvc := settings.NewService(pool)
-	notesSvc := notes.NewService(pool)
-
-	var cfg agent.PromptConfig
-	if soul, err := settingsSvc.GetPromptSetting(ctx, "soul"); err == nil {
-		cfg.Soul = soul.Value
-	}
-	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
-		cfg.User = user.Value
-	}
-	// TODO: pass real agent ID once multi-agent is wired up.
-	if memories, err := notesSvc.FormatForPrompt(ctx, "", agent.DefaultCharLimits().Memories); err == nil {
-		cfg.Memories = memories
-	}
-	systemPrompt := agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
-
-	// Notes service shared across sessions. MemorySaveTool is created
-	// per-session in createFn with the session's ID.
-	createFn := func(s *chat.Session) *agent.Agent {
-		registry := tool.NewRegistry()
-		registry.Register(&tool.TimeTool{})
-		registry.Register(&tool.ArithmeticTool{})
-		registry.Register(&tool.ReadFileTool{})
-		registry.Register(&tool.ExecCommandTool{})
-		registry.Register(&tool.WriteFileTool{})
-		registry.Register(&tool.EditFileTool{})
-		registry.Register(&tool.MemorySaveTool{
-			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
-			SessionID: s.ID,
-		})
-
-		return agent.NewFromContext(
-			p, systemPrompt, registry, 128000,
-			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		)
-	}
-
-	return chat.NewService(pool, createFn, configFn)
 }

@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"iclaw/pkg/app/agents"
 	"iclaw/pkg/app/passwords"
 	"iclaw/pkg/app/settings"
 
@@ -79,6 +80,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	}
 
 	if err := seedSettings(ctx, pool); err != nil {
+		return nil, err
+	}
+
+	if err := seedDefaultAgent(ctx, pool); err != nil {
 		return nil, err
 	}
 
@@ -227,8 +232,8 @@ func seedCredentials(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// seedSettings writes default prompt settings (SOUL, USER) on first deploy.
-// Uses UpsertPromptSetting so existing values are not overwritten.
+// seedSettings writes default KV settings on first deploy.
+// Only creates settings that don't exist yet.
 func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
 	svc := settings.NewService(pool)
 
@@ -236,23 +241,55 @@ func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
 		name  string
 		value string
 	}{
-		{"soul", "You are iClaw, a personal AI assistant. " +
-			"Be genuinely helpful, not performatively helpful. Skip filler words like 'Great question!' and just help. " +
-			"Have opinions. Be direct. Admit uncertainty when appropriate. " +
-			"Be resourceful before asking. Try to figure it out, then ask if stuck. " +
-			"Be concise when needed, thorough when it matters."},
-		{"user", ""},
+		{settings.SettingUserProfile, ""},
 	}
 
 	for _, d := range defaults {
 		// Only seed if the setting doesn't exist yet.
-		if _, err := svc.GetPromptSetting(ctx, d.name); err != nil {
-			if err := svc.UpsertPromptSetting(ctx, d.name, d.value); err != nil {
+		if _, err := svc.GetKVSetting(ctx, d.name); err != nil {
+			if err := svc.UpsertKVSetting(ctx, d.name, d.value); err != nil {
 				return fmt.Errorf("seed setting %q: %w", d.name, err)
 			}
 			log.Printf("seeded setting: %s", d.name)
 		}
 	}
+	return nil
+}
+
+// seedDefaultAgent creates the genesis agent on first deploy if none exists.
+// This is the first agent created in the system, and is set as the default agent.
+func seedDefaultAgent(ctx context.Context, pool *pgxpool.Pool) error {
+	svc := agents.NewService(pool)
+
+	existing, err := svc.ListAgents(ctx)
+	if err != nil {
+		return fmt.Errorf("list agents: %w", err)
+	}
+	if len(existing) > 0 {
+		log.Printf("agents already exist, skipping seed")
+		return nil
+	}
+
+	defaultSoul := "You are iClaw, a personal AI assistant. " +
+		"Be genuinely helpful, not performatively helpful. Skip filler words like 'Great question!' and just help. " +
+		"Have opinions. Be direct. Admit uncertainty when appropriate. " +
+		"Be resourceful before asking. Try to figure it out, then ask if stuck. " +
+		"Be concise when needed, thorough when it matters."
+
+	// TODO: model should come from CDK parameter or environment variable or some other way instead of hardcoded.
+	a, err := svc.CreateAgent(ctx, "genesis", defaultSoul, "claude-sonnet-4-20250514")
+	if err != nil {
+		return fmt.Errorf("seed genesis agent: %w", err)
+	}
+	log.Printf("seeded genesis agent: %s (%s)", a.Name, a.ID)
+
+	// Set the genesis agent as the default agent.
+	settingsSvc := settings.NewService(pool)
+	if err := settingsSvc.UpsertKVSetting(ctx, settings.SettingDefaultAgentID, a.ID); err != nil {
+		return fmt.Errorf("seed default_agent_id setting: %w", err)
+	}
+	log.Printf("seeded default_agent_id: %s", a.ID)
+
 	return nil
 }
 

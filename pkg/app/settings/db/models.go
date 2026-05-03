@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type AppSettingsPrompt struct {
+type AppSettingsKv struct {
 	ID        string
 	Name      string
 	Value     string

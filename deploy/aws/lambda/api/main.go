@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"iclaw/pkg/app/chat"
 	"iclaw/pkg/app/passwords"
+	"iclaw/pkg/app/settings"
 	"log"
 	"net/http"
 	"os"
@@ -16,8 +17,9 @@ import (
 )
 
 var (
-	svc    *chat.Service
-	apiKey string
+	svc         *chat.Service
+	settingsSvc *settings.Service
+	apiKey      string
 )
 
 // init runs once when Lambda cold-starts. Connects to DSQL and sets up
@@ -42,6 +44,8 @@ func init() {
 		apiKey = apiKeyCred.Value
 	}
 
+	settingsSvc = settings.NewService(pool)
+
 	// Session CRUD doesn't need LLM provider or tools, pass nil for createFn.
 	svc = chat.NewService(pool, nil, nil)
 }
@@ -65,6 +69,9 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	case method == "DELETE" && strings.HasPrefix(path, "/sessions/"):
 		id := strings.TrimPrefix(path, "/sessions/")
 		return handleDeleteSession(ctx, id)
+	case method == "GET" && strings.HasPrefix(path, "/settings/"):
+		name := strings.TrimPrefix(path, "/settings/")
+		return handleGetSetting(ctx, name)
 	}
 
 	return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
@@ -72,14 +79,15 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 
 func handleCreateSession(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var body struct {
-		UserID string `json:"user_id"`
-		Title  string `json:"title"`
+		UserID   string   `json:"user_id"`
+		AgentIDs []string `json:"agent_ids"`
+		Title    string   `json:"title"`
 	}
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 	}
 
-	s, err := svc.NewSession(ctx, body.UserID, body.Title)
+	s, err := svc.NewSession(ctx, body.UserID, body.AgentIDs, body.Title)
 	if err != nil {
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -107,6 +115,14 @@ func handleDeleteSession(ctx context.Context, id string) (events.APIGatewayV2HTT
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func handleGetSetting(ctx context.Context, name string) (events.APIGatewayV2HTTPResponse, error) {
+	s, err := settingsSvc.GetKVSetting(ctx, name)
+	if err != nil {
+		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+	return jsonResponse(http.StatusOK, s)
 }
 
 func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error) {

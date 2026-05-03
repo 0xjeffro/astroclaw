@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"iclaw/pkg/agent"
+	"iclaw/pkg/app/agents"
 	"iclaw/pkg/app/chat"
 	"iclaw/pkg/app/notes"
 	"iclaw/pkg/app/passwords"
@@ -25,7 +26,7 @@ var (
 	apiKey string
 )
 
-// init runs once when Lambda cold-starts. Connects to DSQL, sets up
+// Init runs once when Lambda cold-starts. Connects to DSQL, sets up
 // credentials and chat service. System prompt is built per-session
 // in createFn so it always reads the latest settings and memories.
 func init() {
@@ -60,13 +61,19 @@ func init() {
 	}
 	p = provider.NewAnthropic(llmCred.Value, model)
 
+	agentsSvc := agents.NewService(pool)
 	settingsSvc := settings.NewService(pool)
 	notesSvc := notes.NewService(pool)
 
-	createFn := func(s *chat.Session) *agent.Agent {
-		// Build system prompt per-session so it always reads the latest
-		// settings (SOUL, USER) and memories from the database.
-		systemPrompt := buildPrompt(context.Background(), settingsSvc, notesSvc)
+	createFn := func(s *chat.Session, agentID string) *agent.Agent {
+		// Load agent profile dynamically per request.
+		agentProfile, err := agentsSvc.GetAgent(context.Background(), agentID)
+		if err != nil {
+			log.Printf("agent %s not found, using empty profile: %v", agentID, err)
+			agentProfile = &agents.Agent{}
+		}
+
+		systemPrompt := buildPrompt(context.Background(), agentProfile, settingsSvc, notesSvc)
 
 		registry := tool.NewRegistry()
 		registry.Register(&tool.TimeTool{})
@@ -79,6 +86,7 @@ func init() {
 		registry.Register(&tool.EditFileTool{})
 		registry.Register(&tool.MemorySaveTool{
 			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
+			AgentID:   agentID,
 			SessionID: s.ID,
 		})
 
@@ -91,16 +99,13 @@ func init() {
 	svc = chat.NewService(pool, createFn, nil)
 }
 
-func buildPrompt(ctx context.Context, settingsSvc *settings.Service, notesSvc *notes.Service) string {
+func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *settings.Service, notesSvc *notes.Service) string {
 	var cfg agent.PromptConfig
-	if soul, err := settingsSvc.GetPromptSetting(ctx, "soul"); err == nil {
-		cfg.Soul = soul.Value
-	}
-	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
+	cfg.Soul = agentProfile.Soul
+	if user, err := settingsSvc.GetKVSetting(ctx, settings.SettingUserProfile); err == nil {
 		cfg.User = user.Value
 	}
-	// TODO: pass real agent ID once multi-agent is wired up.
-	if memories, err := notesSvc.FormatForPrompt(ctx, "", agent.DefaultCharLimits().Memories); err == nil {
+	if memories, err := notesSvc.FormatForPrompt(ctx, agentProfile.ID, agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
 	}
 	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
@@ -120,13 +125,14 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	sessionID := parts[1]
 
 	var body struct {
-		Text string `json:"text"`
+		Text    string `json:"text"`
+		AgentID string `json:"agent_id"`
 	}
 	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
 		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 	}
 
-	reply, err := svc.Reply(ctx, sessionID, body.Text)
+	reply, err := svc.Reply(ctx, sessionID, body.AgentID, body.Text)
 	if err != nil {
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}

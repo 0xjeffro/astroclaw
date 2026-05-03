@@ -11,15 +11,21 @@ var (
 	ErrNotFound = errors.New("setting not found")
 )
 
-type PromptSetting struct {
+// Setting name constants.
+const (
+	SettingUserProfile    = "user_profile"
+	SettingDefaultAgentID = "default_agent_id"
+)
+
+type KVSetting struct {
 	ID        string
 	Name      string
 	Value     string
 	UpdatedAt time.Time
 }
 
-func PromptSettingFromDB(s db.AppSettingsPrompt) *PromptSetting {
-	return &PromptSetting{
+func KVSettingFromDB(s db.AppSettingsKv) *KVSetting {
+	return &KVSetting{
 		ID:        s.ID,
 		Name:      s.Name,
 		Value:     s.Value,

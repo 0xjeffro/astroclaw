@@ -19,21 +19,21 @@ func NewService(pool *pgxpool.Pool) *Service {
 	}
 }
 
-func (svc *Service) GetPromptSetting(ctx context.Context, name string) (*PromptSetting, error) {
-	s, err := svc.queries.GetPromptSetting(ctx, name)
+func (svc *Service) GetKVSetting(ctx context.Context, name string) (*KVSetting, error) {
+	s, err := svc.queries.GetKVSetting(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("setting %q: %w", name, ErrNotFound)
 	}
-	return PromptSettingFromDB(s), nil
+	return KVSettingFromDB(s), nil
 }
 
-// UpsertPromptSetting creates a setting if it doesn't exist, or updates
+// UpsertKVSetting creates a setting if it doesn't exist, or updates
 // its value if it does.
-func (svc *Service) UpsertPromptSetting(ctx context.Context, name, value string) error {
-	_, err := svc.queries.GetPromptSetting(ctx, name)
+func (svc *Service) UpsertKVSetting(ctx context.Context, name, value string) error {
+	_, err := svc.queries.GetKVSetting(ctx, name)
 	if err != nil {
 		// Doesn't exist, create it.
-		_, err = svc.queries.CreatePromptSetting(ctx, db.CreatePromptSettingParams{
+		_, err = svc.queries.CreateKVSetting(ctx, db.CreateKVSettingParams{
 			Name:  name,
 			Value: value,
 		})
@@ -43,7 +43,7 @@ func (svc *Service) UpsertPromptSetting(ctx context.Context, name, value string)
 		return nil
 	}
 	// Exists, update it.
-	return svc.queries.UpdatePromptSetting(ctx, db.UpdatePromptSettingParams{
+	return svc.queries.UpdateKVSetting(ctx, db.UpdateKVSettingParams{
 		Value: value,
 		Name:  name,
 	})

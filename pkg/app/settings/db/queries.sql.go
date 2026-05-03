@@ -9,20 +9,20 @@ import (
 	"context"
 )
 
-const createPromptSetting = `-- name: CreatePromptSetting :one
-INSERT INTO app_settings_prompt (name, value)
+const createKVSetting = `-- name: CreateKVSetting :one
+INSERT INTO app_settings_kv (name, value)
 VALUES ($1, $2)
 RETURNING id, name, value, updated_at
 `
 
-type CreatePromptSettingParams struct {
+type CreateKVSettingParams struct {
 	Name  string
 	Value string
 }
 
-func (q *Queries) CreatePromptSetting(ctx context.Context, arg CreatePromptSettingParams) (AppSettingsPrompt, error) {
-	row := q.db.QueryRow(ctx, createPromptSetting, arg.Name, arg.Value)
-	var i AppSettingsPrompt
+func (q *Queries) CreateKVSetting(ctx context.Context, arg CreateKVSettingParams) (AppSettingsKv, error) {
+	row := q.db.QueryRow(ctx, createKVSetting, arg.Name, arg.Value)
+	var i AppSettingsKv
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -32,13 +32,13 @@ func (q *Queries) CreatePromptSetting(ctx context.Context, arg CreatePromptSetti
 	return i, err
 }
 
-const getPromptSetting = `-- name: GetPromptSetting :one
-SELECT id, name, value, updated_at FROM app_settings_prompt WHERE name = $1
+const getKVSetting = `-- name: GetKVSetting :one
+SELECT id, name, value, updated_at FROM app_settings_kv WHERE name = $1
 `
 
-func (q *Queries) GetPromptSetting(ctx context.Context, name string) (AppSettingsPrompt, error) {
-	row := q.db.QueryRow(ctx, getPromptSetting, name)
-	var i AppSettingsPrompt
+func (q *Queries) GetKVSetting(ctx context.Context, name string) (AppSettingsKv, error) {
+	row := q.db.QueryRow(ctx, getKVSetting, name)
+	var i AppSettingsKv
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -48,17 +48,17 @@ func (q *Queries) GetPromptSetting(ctx context.Context, name string) (AppSetting
 	return i, err
 }
 
-const updatePromptSetting = `-- name: UpdatePromptSetting :exec
-UPDATE app_settings_prompt SET value = $1, updated_at = now()
+const updateKVSetting = `-- name: UpdateKVSetting :exec
+UPDATE app_settings_kv SET value = $1, updated_at = now()
 WHERE name = $2
 `
 
-type UpdatePromptSettingParams struct {
+type UpdateKVSettingParams struct {
 	Value string
 	Name  string
 }
 
-func (q *Queries) UpdatePromptSetting(ctx context.Context, arg UpdatePromptSettingParams) error {
-	_, err := q.db.Exec(ctx, updatePromptSetting, arg.Value, arg.Name)
+func (q *Queries) UpdateKVSetting(ctx context.Context, arg UpdateKVSettingParams) error {
+	_, err := q.db.Exec(ctx, updateKVSetting, arg.Value, arg.Name)
 	return err
 }

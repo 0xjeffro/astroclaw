@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addSessionAgent = `-- name: AddSessionAgent :exec
+INSERT INTO app_chat_session_agents (session_id, agent_id, role)
+VALUES ($1, $2, $3)
+`
+
+type AddSessionAgentParams struct {
+	SessionID string
+	AgentID   string
+	Role      string
+}
+
+func (q *Queries) AddSessionAgent(ctx context.Context, arg AddSessionAgentParams) error {
+	_, err := q.db.Exec(ctx, addSessionAgent, arg.SessionID, arg.AgentID, arg.Role)
+	return err
+}
+
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO app_chat_messages (session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -147,6 +163,35 @@ func (q *Queries) ListMessages(ctx context.Context, sessionID string) ([]AppChat
 			&i.ReplyTo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionAgents = `-- name: ListSessionAgents :many
+SELECT session_id, agent_id, role, joined_at FROM app_chat_session_agents WHERE session_id = $1
+`
+
+func (q *Queries) ListSessionAgents(ctx context.Context, sessionID string) ([]AppChatSessionAgent, error) {
+	rows, err := q.db.Query(ctx, listSessionAgents, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AppChatSessionAgent
+	for rows.Next() {
+		var i AppChatSessionAgent
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.AgentID,
+			&i.Role,
+			&i.JoinedAt,
 		); err != nil {
 			return nil, err
 		}

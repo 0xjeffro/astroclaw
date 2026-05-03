@@ -18,6 +18,13 @@ SELECT * FROM app_chat_sessions WHERE deleted_at IS NULL ORDER BY created_at DES
 -- name: ListSessionsByUser :many
 SELECT * FROM app_chat_sessions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC;
 
+-- name: AddSessionAgent :exec
+INSERT INTO app_chat_session_agents (session_id, agent_id, role)
+VALUES ($1, $2, $3);
+
+-- name: ListSessionAgents :many
+SELECT * FROM app_chat_session_agents WHERE session_id = $1;
+
 -- name: SoftDeleteSession :exec
 UPDATE app_chat_sessions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL;
 

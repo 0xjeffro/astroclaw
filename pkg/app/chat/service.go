@@ -18,13 +18,13 @@ import (
 type Service struct {
 	pool        *pgxpool.Pool
 	queries     *db.Queries
-	createAgent func(s *Session) *agent.Agent
+	createAgent func(s *Session, agentID string) *agent.Agent
 	configAgent func(a *agent.Agent)
 }
 
 func NewService(
 	pool *pgxpool.Pool,
-	createFn func(s *Session) *agent.Agent,
+	createFn func(s *Session, agentID string) *agent.Agent,
 	configFn func(a *agent.Agent),
 ) *Service {
 	return &Service{
@@ -35,8 +35,16 @@ func NewService(
 	}
 }
 
-func (svc *Service) NewSession(ctx context.Context, userID string, title string) (*Session, error) {
-	s, err := svc.queries.CreateSession(ctx, db.CreateSessionParams{
+func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []string, title string) (*Session, error) {
+	tx, err := svc.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := svc.queries.WithTx(tx)
+
+	s, err := qtx.CreateSession(ctx, db.CreateSessionParams{
 		Title:           title,
 		UserID:          userID,
 		ContextMessages: "[]",
@@ -44,6 +52,21 @@ func (svc *Service) NewSession(ctx context.Context, userID string, title string)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
+
+	for _, agentID := range agentIDs {
+		if err := qtx.AddSessionAgent(ctx, db.AddSessionAgentParams{
+			SessionID: s.ID,
+			AgentID:   agentID,
+			Role:      "primary",
+		}); err != nil {
+			return nil, fmt.Errorf("add agent %s to session: %w", agentID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
 	session, err := SessionFromDB(s)
 	if err != nil {
 		return nil, fmt.Errorf("parse session: %w", err)
@@ -86,12 +109,12 @@ func (svc *Service) SoftDeleteSession(ctx context.Context, id string) error {
 // message, persists new messages and updated context, then discards the Agent.
 // Persistence uses a database transaction: messages + context update either
 // both succeed or both roll back, preventing inconsistent state.
-func (svc *Service) Reply(ctx context.Context, sessionID string, text string) (string, error) {
+func (svc *Service) Reply(ctx context.Context, sessionID string, agentID string, text string) (string, error) {
 	s, err := svc.GetSession(ctx, sessionID)
 	if err != nil {
 		return "", err
 	}
-	a := svc.createAgent(s)
+	a := svc.createAgent(s, agentID)
 	if svc.configAgent != nil {
 		svc.configAgent(a)
 	}

@@ -122,7 +122,7 @@ func setupService(t *testing.T, responses []provider.Message) (*Service, *fakePr
 
 	fp := &fakeProvider{responses: responses}
 
-	createFn := func(s *Session) *agent.Agent {
+	createFn := func(s *Session, agentID string) *agent.Agent {
 		return agent.NewFromContext(
 			fp, s.SystemPrompt, nil, s.ContextWindow,
 			ToProviderMessages(s.ContextMessages), s.ContextSummary,
@@ -141,11 +141,11 @@ func TestReply_PersistsMessages(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, "chat")
+	s, err := svc.NewSession(ctx, testUserID, nil, "chat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	reply, err := svc.Reply(ctx, s.ID, "hello")
+	reply, err := svc.Reply(ctx, s.ID, "", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,12 +163,12 @@ func TestReply_SavesContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, "chat")
+	s, err := svc.NewSession(ctx, testUserID, nil, "chat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = svc.Reply(ctx, s.ID, "msg 1")
-	_, _ = svc.Reply(ctx, s.ID, "msg 2")
+	_, _ = svc.Reply(ctx, s.ID, "", "msg 1")
+	_, _ = svc.Reply(ctx, s.ID, "", "msg 2")
 
 	updated, _ := svc.GetSession(ctx, s.ID)
 	if len(updated.ContextMessages) == 0 {
@@ -188,13 +188,13 @@ func TestReply_RestoresContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, "restored")
+	s, err := svc.NewSession(ctx, testUserID, nil, "restored")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = svc.Reply(ctx, s.ID, "my name is Jeffro")
+	_, _ = svc.Reply(ctx, s.ID, "", "my name is Jeffro")
 
-	reply, err := svc.Reply(ctx, s.ID, "do you remember me?")
+	reply, err := svc.Reply(ctx, s.ID, "", "do you remember me?")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestReply_RestoresContext(t *testing.T) {
 // returns an error.
 func TestReply_InvalidSession(t *testing.T) {
 	svc, _ := setupService(t, nil)
-	_, err := svc.Reply(context.Background(), "00000000-0000-0000-0000-000000000000", "hello")
+	_, err := svc.Reply(context.Background(), "00000000-0000-0000-0000-000000000000", "", "hello")
 	if err == nil {
 		t.Error("expected error for non-existent session")
 	}
