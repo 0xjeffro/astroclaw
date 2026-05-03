@@ -61,7 +61,7 @@ CDK deployment currently defaults to Aurora DSQL. A future release will add a co
 cd deploy/aws/infra
 npm install
 cdk bootstrap   # one-time per account/region: creates an S3 bucket and IAM roles that CDK needs to upload assets and deploy stacks. Skip this if you've bootstrapped this account/region before.
-cdk deploy
+cdk deploy --parameters AnthropicApiKey=<YOUR-KEY> --parameters GenerateApiKey=true
 ```
 
 After deployment, the API URL will be printed in the terminal output.
