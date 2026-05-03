@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/agents"
 	"iclaw/pkg/app/chat"
@@ -65,12 +66,11 @@ func init() {
 	settingsSvc := settings.NewService(pool)
 	notesSvc := notes.NewService(pool)
 
-	createFn := func(s *chat.Session, agentID string) *agent.Agent {
+	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
 		// Load agent profile dynamically per request.
 		agentProfile, err := agentsSvc.GetAgent(context.Background(), agentID)
 		if err != nil {
-			log.Printf("agent %s not found, using empty profile: %v", agentID, err)
-			agentProfile = &agents.Agent{}
+			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
 
 		systemPrompt := buildPrompt(context.Background(), agentProfile, settingsSvc, notesSvc)
@@ -93,10 +93,10 @@ func init() {
 		return agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
 			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		)
+		), nil
 	}
 
-	svc = chat.NewService(pool, createFn, nil)
+	svc = chat.NewService(pool, createFn)
 }
 
 func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *settings.Service, notesSvc *notes.Service) string {

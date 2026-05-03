@@ -122,14 +122,14 @@ func setupService(t *testing.T, responses []provider.Message) (*Service, *fakePr
 
 	fp := &fakeProvider{responses: responses}
 
-	createFn := func(s *Session, agentID string) *agent.Agent {
+	createFn := func(s *Session, agentID string) (*agent.Agent, error) {
 		return agent.NewFromContext(
 			fp, s.SystemPrompt, nil, s.ContextWindow,
 			ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		)
+		), nil
 	}
 
-	svc := NewService(testPool, createFn, nil)
+	svc := NewService(testPool, createFn)
 	return svc, fp
 }
 

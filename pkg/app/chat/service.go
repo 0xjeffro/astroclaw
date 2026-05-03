@@ -18,20 +18,17 @@ import (
 type Service struct {
 	pool        *pgxpool.Pool
 	queries     *db.Queries
-	createAgent func(s *Session, agentID string) *agent.Agent
-	configAgent func(a *agent.Agent)
+	createAgent func(s *Session, agentID string) (*agent.Agent, error)
 }
 
 func NewService(
 	pool *pgxpool.Pool,
-	createFn func(s *Session, agentID string) *agent.Agent,
-	configFn func(a *agent.Agent),
+	createFn func(s *Session, agentID string) (*agent.Agent, error),
 ) *Service {
 	return &Service{
 		pool:        pool,
 		queries:     db.New(pool),
 		createAgent: createFn,
-		configAgent: configFn,
 	}
 }
 
@@ -114,11 +111,10 @@ func (svc *Service) Reply(ctx context.Context, sessionID string, agentID string,
 	if err != nil {
 		return "", err
 	}
-	a := svc.createAgent(s, agentID)
-	if svc.configAgent != nil {
-		svc.configAgent(a)
+	a, err := svc.createAgent(s, agentID)
+	if err != nil {
+		return "", fmt.Errorf("create agent: %w", err)
 	}
-
 	historyBefore := len(a.History())
 
 	reply, err := a.Reply(ctx, text)

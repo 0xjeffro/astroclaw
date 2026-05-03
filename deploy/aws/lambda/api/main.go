@@ -47,7 +47,7 @@ func init() {
 	settingsSvc = settings.NewService(pool)
 
 	// Session CRUD doesn't need LLM provider or tools, pass nil for createFn.
-	svc = chat.NewService(pool, nil, nil)
+	svc = chat.NewService(pool, nil)
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
