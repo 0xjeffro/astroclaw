@@ -1,3 +1,14 @@
+-- Create "app_agents_profiles" table
+CREATE TABLE "public"."app_agents_profiles" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "name" text NOT NULL,
+  "soul" text NOT NULL DEFAULT '',
+  "model" text NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "deleted_at" timestamptz NULL,
+  PRIMARY KEY ("id")
+);
 -- Create "app_chat_messages" table
 CREATE TABLE "public"."app_chat_messages" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -15,6 +26,14 @@ CREATE TABLE "public"."app_chat_messages" (
 );
 -- Create index "idx_app_chat_messages_session_seq" to table: "app_chat_messages"
 CREATE INDEX "idx_app_chat_messages_session_seq" ON "public"."app_chat_messages" ("session_id", "sequence_number");
+-- Create "app_chat_session_agents" table
+CREATE TABLE "public"."app_chat_session_agents" (
+  "session_id" uuid NOT NULL,
+  "agent_id" uuid NOT NULL,
+  "role" text NOT NULL DEFAULT 'primary',
+  "joined_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("session_id", "agent_id")
+);
 -- Create "app_chat_session_members" table
 CREATE TABLE "public"."app_chat_session_members" (
   "session_id" uuid NOT NULL,

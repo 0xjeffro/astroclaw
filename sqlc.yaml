@@ -77,3 +77,24 @@ sql:
           - db_type: "timestamptz"
             go_type: "time.Time"
             nullable: false
+  - engine: "postgresql"
+    queries: "pkg/app/agents/db/queries.sql"
+    schema: "pkg/app/agents/db/schema.sql"
+    gen:
+      go:
+        package: "db"
+        out: "pkg/app/agents/db"
+        sql_package: "pgx/v5"
+        overrides:
+          - db_type: "uuid"
+            go_type: "string"
+            nullable: false
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+            nullable: false
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true

@@ -38,6 +38,16 @@ CREATE TABLE app_chat_session_members (
     PRIMARY KEY (session_id, user_id)
 );
 
+-- Tracks which agents participate in a session.
+-- One session can have multiple agents.
+CREATE TABLE app_chat_session_agents (
+    session_id UUID NOT NULL,
+    agent_id   UUID NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'primary',
+    joined_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (session_id, agent_id)
+);
+
 CREATE TABLE app_chat_messages (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id         UUID NOT NULL,

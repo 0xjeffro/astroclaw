@@ -38,6 +38,13 @@ type AppChatSession struct {
 	DeletedAt       *time.Time
 }
 
+type AppChatSessionAgent struct {
+	SessionID string
+	AgentID   string
+	Role      string
+	JoinedAt  time.Time
+}
+
 type AppChatSessionMember struct {
 	SessionID string
 	UserID    string
