@@ -10,7 +10,7 @@ import (
 )
 
 const createCredential = `-- name: CreateCredential :one
-INSERT INTO credentials (name, value, description)
+INSERT INTO app_passwords_credentials (name, value, description)
 VALUES ($1, $2, $3)
 RETURNING id, name, value, description, created_at, updated_at, deleted_at
 `
@@ -21,9 +21,9 @@ type CreateCredentialParams struct {
 	Description string
 }
 
-func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialParams) (Credential, error) {
+func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialParams) (AppPasswordsCredential, error) {
 	row := q.db.QueryRow(ctx, createCredential, arg.Name, arg.Value, arg.Description)
-	var i Credential
+	var i AppPasswordsCredential
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -37,12 +37,12 @@ func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialPara
 }
 
 const getCredentialByName = `-- name: GetCredentialByName :one
-SELECT id, name, value, description, created_at, updated_at, deleted_at FROM credentials WHERE name = $1 AND deleted_at IS NULL
+SELECT id, name, value, description, created_at, updated_at, deleted_at FROM app_passwords_credentials WHERE name = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetCredentialByName(ctx context.Context, name string) (Credential, error) {
+func (q *Queries) GetCredentialByName(ctx context.Context, name string) (AppPasswordsCredential, error) {
 	row := q.db.QueryRow(ctx, getCredentialByName, name)
-	var i Credential
+	var i AppPasswordsCredential
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -56,7 +56,7 @@ func (q *Queries) GetCredentialByName(ctx context.Context, name string) (Credent
 }
 
 const softDeleteCredential = `-- name: SoftDeleteCredential :exec
-UPDATE credentials SET deleted_at = now() WHERE name = $1 AND deleted_at IS NULL
+UPDATE app_passwords_credentials SET deleted_at = now() WHERE name = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteCredential(ctx context.Context, name string) error {
@@ -65,7 +65,7 @@ func (q *Queries) SoftDeleteCredential(ctx context.Context, name string) error {
 }
 
 const updateCredential = `-- name: UpdateCredential :exec
-UPDATE credentials
+UPDATE app_passwords_credentials
 SET value = $1, description = $2, updated_at = now()
 WHERE name = $3 AND deleted_at IS NULL
 `

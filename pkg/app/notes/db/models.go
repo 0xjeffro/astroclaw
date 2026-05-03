@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-type Memory struct {
+type AppNotesMemory struct {
 	ID        string
 	Content   string
 	SessionID string
 	CreatedAt time.Time
 }
 
-type MemorySource struct {
+type AppNotesMemorySource struct {
 	MemoryID  string
 	MessageID string
 }

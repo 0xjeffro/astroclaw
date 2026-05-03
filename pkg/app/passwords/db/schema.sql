@@ -1,6 +1,6 @@
 
 
-CREATE TABLE credentials (
+CREATE TABLE app_passwords_credentials (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL,
     value       TEXT NOT NULL,

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Credential struct {
+type AppPasswordsCredential struct {
 	ID          string
 	Name        string
 	Value       string

@@ -14,7 +14,7 @@ type Memory struct {
 	CreatedAt  time.Time
 }
 
-func MemoryFromDB(m db.Memory, messageIDs []string) *Memory {
+func MemoryFromDB(m db.AppNotesMemory, messageIDs []string) *Memory {
 	return &Memory{
 		ID:         m.ID,
 		Content:    m.Content,

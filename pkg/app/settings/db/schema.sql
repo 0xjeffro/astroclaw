@@ -2,7 +2,7 @@
 -- Each name maps to one prompt fragment that gets injected into the
 -- system prompt at assembly time.
 
-CREATE TABLE settings_prompt (
+CREATE TABLE app_settings_prompt (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name       TEXT NOT NULL UNIQUE,
     value      TEXT NOT NULL DEFAULT '',

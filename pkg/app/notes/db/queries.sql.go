@@ -10,7 +10,7 @@ import (
 )
 
 const addMemorySource = `-- name: AddMemorySource :exec
-INSERT INTO memory_sources (memory_id, message_id)
+INSERT INTO app_notes_memory_sources (memory_id, message_id)
 VALUES ($1, $2)
 `
 
@@ -25,7 +25,7 @@ func (q *Queries) AddMemorySource(ctx context.Context, arg AddMemorySourceParams
 }
 
 const createMemory = `-- name: CreateMemory :one
-INSERT INTO memories (content, session_id)
+INSERT INTO app_notes_memories (content, session_id)
 VALUES ($1, $2)
 RETURNING id, content, session_id, created_at
 `
@@ -35,9 +35,9 @@ type CreateMemoryParams struct {
 	SessionID string
 }
 
-func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (Memory, error) {
+func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (AppNotesMemory, error) {
 	row := q.db.QueryRow(ctx, createMemory, arg.Content, arg.SessionID)
-	var i Memory
+	var i AppNotesMemory
 	err := row.Scan(
 		&i.ID,
 		&i.Content,
@@ -48,12 +48,12 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (Mem
 }
 
 const getMemory = `-- name: GetMemory :one
-SELECT id, content, session_id, created_at FROM memories WHERE id = $1
+SELECT id, content, session_id, created_at FROM app_notes_memories WHERE id = $1
 `
 
-func (q *Queries) GetMemory(ctx context.Context, id string) (Memory, error) {
+func (q *Queries) GetMemory(ctx context.Context, id string) (AppNotesMemory, error) {
 	row := q.db.QueryRow(ctx, getMemory, id)
-	var i Memory
+	var i AppNotesMemory
 	err := row.Scan(
 		&i.ID,
 		&i.Content,
@@ -64,7 +64,7 @@ func (q *Queries) GetMemory(ctx context.Context, id string) (Memory, error) {
 }
 
 const getMemorySources = `-- name: GetMemorySources :many
-SELECT message_id FROM memory_sources WHERE memory_id = $1
+SELECT message_id FROM app_notes_memory_sources WHERE memory_id = $1
 `
 
 func (q *Queries) GetMemorySources(ctx context.Context, memoryID string) ([]string, error) {
@@ -88,18 +88,18 @@ func (q *Queries) GetMemorySources(ctx context.Context, memoryID string) ([]stri
 }
 
 const listMemories = `-- name: ListMemories :many
-SELECT id, content, session_id, created_at FROM memories ORDER BY created_at DESC
+SELECT id, content, session_id, created_at FROM app_notes_memories ORDER BY created_at DESC
 `
 
-func (q *Queries) ListMemories(ctx context.Context) ([]Memory, error) {
+func (q *Queries) ListMemories(ctx context.Context) ([]AppNotesMemory, error) {
 	rows, err := q.db.Query(ctx, listMemories)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Memory
+	var items []AppNotesMemory
 	for rows.Next() {
-		var i Memory
+		var i AppNotesMemory
 		if err := rows.Scan(
 			&i.ID,
 			&i.Content,
@@ -117,18 +117,18 @@ func (q *Queries) ListMemories(ctx context.Context) ([]Memory, error) {
 }
 
 const listRecentMemories = `-- name: ListRecentMemories :many
-SELECT id, content, session_id, created_at FROM memories ORDER BY created_at DESC LIMIT $1
+SELECT id, content, session_id, created_at FROM app_notes_memories ORDER BY created_at DESC LIMIT $1
 `
 
-func (q *Queries) ListRecentMemories(ctx context.Context, limit int32) ([]Memory, error) {
+func (q *Queries) ListRecentMemories(ctx context.Context, limit int32) ([]AppNotesMemory, error) {
 	rows, err := q.db.Query(ctx, listRecentMemories, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Memory
+	var items []AppNotesMemory
 	for rows.Next() {
-		var i Memory
+		var i AppNotesMemory
 		if err := rows.Scan(
 			&i.ID,
 			&i.Content,

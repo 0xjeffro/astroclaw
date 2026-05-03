@@ -117,8 +117,8 @@ func setupService(t *testing.T, responses []provider.Message) (*Service, *fakePr
 	t.Helper()
 
 	// Clean up data from previous tests.
-	_, _ = testPool.Exec(context.Background(), "DELETE FROM messages")
-	_, _ = testPool.Exec(context.Background(), "DELETE FROM sessions")
+	_, _ = testPool.Exec(context.Background(), "DELETE FROM app_chat_messages")
+	_, _ = testPool.Exec(context.Background(), "DELETE FROM app_chat_sessions")
 
 	fp := &fakeProvider{responses: responses}
 

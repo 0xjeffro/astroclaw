@@ -12,7 +12,7 @@ import (
 )
 
 const createMessage = `-- name: CreateMessage :one
-INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to)
+INSERT INTO app_chat_messages (session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to, created_at, updated_at
 `
@@ -28,7 +28,7 @@ type CreateMessageParams struct {
 	ReplyTo        *string
 }
 
-func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error) {
+func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (AppChatMessage, error) {
 	row := q.db.QueryRow(ctx, createMessage,
 		arg.SessionID,
 		arg.Role,
@@ -39,7 +39,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		arg.ForwardedFrom,
 		arg.ReplyTo,
 	)
-	var i Message
+	var i AppChatMessage
 	err := row.Scan(
 		&i.ID,
 		&i.SessionID,
@@ -57,7 +57,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (title, user_id, model, system_prompt, context_window, context_messages, context_summary)
+INSERT INTO app_chat_sessions (title, user_id, model, system_prompt, context_window, context_messages, context_summary)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at
 `
@@ -72,7 +72,7 @@ type CreateSessionParams struct {
 	ContextSummary  string
 }
 
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (AppChatSession, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.Title,
 		arg.UserID,
@@ -82,7 +82,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.ContextMessages,
 		arg.ContextSummary,
 	)
-	var i Session
+	var i AppChatSession
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -100,12 +100,12 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM sessions WHERE id = $1 AND deleted_at IS NULL
+SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
+func (q *Queries) GetSession(ctx context.Context, id string) (AppChatSession, error) {
 	row := q.db.QueryRow(ctx, getSession, id)
-	var i Session
+	var i AppChatSession
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -123,18 +123,18 @@ func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
 }
 
 const listMessages = `-- name: ListMessages :many
-SELECT id, session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to, created_at, updated_at FROM messages WHERE session_id = $1 ORDER BY sequence_number
+SELECT id, session_id, role, content, tool_calls, tool_call_id, sequence_number, forwarded_from, reply_to, created_at, updated_at FROM app_chat_messages WHERE session_id = $1 ORDER BY sequence_number
 `
 
-func (q *Queries) ListMessages(ctx context.Context, sessionID string) ([]Message, error) {
+func (q *Queries) ListMessages(ctx context.Context, sessionID string) ([]AppChatMessage, error) {
 	rows, err := q.db.Query(ctx, listMessages, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Message
+	var items []AppChatMessage
 	for rows.Next() {
-		var i Message
+		var i AppChatMessage
 		if err := rows.Scan(
 			&i.ID,
 			&i.SessionID,
@@ -159,18 +159,18 @@ func (q *Queries) ListMessages(ctx context.Context, sessionID string) ([]Message
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM sessions WHERE deleted_at IS NULL ORDER BY created_at DESC
+SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE deleted_at IS NULL ORDER BY created_at DESC
 `
 
-func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
+func (q *Queries) ListSessions(ctx context.Context) ([]AppChatSession, error) {
 	rows, err := q.db.Query(ctx, listSessions)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Session
+	var items []AppChatSession
 	for rows.Next() {
-		var i Session
+		var i AppChatSession
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -195,18 +195,18 @@ func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
 }
 
 const listSessionsByUser = `-- name: ListSessionsByUser :many
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM sessions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC
+SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC
 `
 
-func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]Session, error) {
+func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]AppChatSession, error) {
 	rows, err := q.db.Query(ctx, listSessionsByUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Session
+	var items []AppChatSession
 	for rows.Next() {
-		var i Session
+		var i AppChatSession
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -231,7 +231,7 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]Sess
 }
 
 const softDeleteSession = `-- name: SoftDeleteSession :exec
-UPDATE sessions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
+UPDATE app_chat_sessions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteSession(ctx context.Context, id string) error {
@@ -240,7 +240,7 @@ func (q *Queries) SoftDeleteSession(ctx context.Context, id string) error {
 }
 
 const updateSession = `-- name: UpdateSession :exec
-UPDATE sessions
+UPDATE app_chat_sessions
 SET title = $1, model = $2, system_prompt = $3, context_window = $4,
     context_messages = $5, context_summary = $6, updated_at = now()
 WHERE id = $7 AND deleted_at IS NULL

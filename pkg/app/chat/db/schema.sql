@@ -8,7 +8,7 @@
 --   - PL/pgSQL (SQL-language functions only)
 --   - Multiple DDL statements per transaction
 
-CREATE TABLE users (
+CREATE TABLE app_chat_users (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email      TEXT UNIQUE NOT NULL,
     name       TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE sessions (
+CREATE TABLE app_chat_sessions (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id          UUID NOT NULL,
     title            TEXT NOT NULL DEFAULT '',
@@ -30,7 +30,7 @@ CREATE TABLE sessions (
     deleted_at       TIMESTAMPTZ
 );
 
-CREATE TABLE session_members (
+CREATE TABLE app_chat_session_members (
     session_id UUID NOT NULL,
     user_id    UUID NOT NULL,
     role       TEXT NOT NULL DEFAULT 'guest',
@@ -38,7 +38,7 @@ CREATE TABLE session_members (
     PRIMARY KEY (session_id, user_id)
 );
 
-CREATE TABLE messages (
+CREATE TABLE app_chat_messages (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id         UUID NOT NULL,
     role               TEXT NOT NULL,
@@ -52,4 +52,4 @@ CREATE TABLE messages (
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_messages_session_seq ON messages(session_id, sequence_number);
+CREATE INDEX idx_app_chat_messages_session_seq ON app_chat_messages(session_id, sequence_number);

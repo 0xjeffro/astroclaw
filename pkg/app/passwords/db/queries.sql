@@ -1,15 +1,15 @@
 -- name: CreateCredential :one
-INSERT INTO credentials (name, value, description)
+INSERT INTO app_passwords_credentials (name, value, description)
 VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetCredentialByName :one
-SELECT * FROM credentials WHERE name = $1 AND deleted_at IS NULL;
+SELECT * FROM app_passwords_credentials WHERE name = $1 AND deleted_at IS NULL;
 
 -- name: UpdateCredential :exec
-UPDATE credentials
+UPDATE app_passwords_credentials
 SET value = $1, description = $2, updated_at = now()
 WHERE name = $3 AND deleted_at IS NULL;
 
 -- name: SoftDeleteCredential :exec
-UPDATE credentials SET deleted_at = now() WHERE name = $1 AND deleted_at IS NULL;
+UPDATE app_passwords_credentials SET deleted_at = now() WHERE name = $1 AND deleted_at IS NULL;

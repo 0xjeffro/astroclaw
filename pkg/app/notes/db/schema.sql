@@ -3,7 +3,7 @@
 -- Each memory is a single fact or observation that the agent decided
 -- was worth persisting via the memory_save tool.
 
-CREATE TABLE memories (
+CREATE TABLE app_notes_memories (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     content    TEXT NOT NULL,
     session_id UUID NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE memories (
 
 -- Tracks which messages a memory was derived from.
 -- One memory can come from multiple messages.
-CREATE TABLE memory_sources (
+CREATE TABLE app_notes_memory_sources (
     memory_id  UUID NOT NULL,
     message_id UUID NOT NULL,
     PRIMARY KEY (memory_id, message_id)

@@ -10,7 +10,7 @@ import (
 )
 
 const createPromptSetting = `-- name: CreatePromptSetting :one
-INSERT INTO settings_prompt (name, value)
+INSERT INTO app_settings_prompt (name, value)
 VALUES ($1, $2)
 RETURNING id, name, value, updated_at
 `
@@ -20,9 +20,9 @@ type CreatePromptSettingParams struct {
 	Value string
 }
 
-func (q *Queries) CreatePromptSetting(ctx context.Context, arg CreatePromptSettingParams) (SettingsPrompt, error) {
+func (q *Queries) CreatePromptSetting(ctx context.Context, arg CreatePromptSettingParams) (AppSettingsPrompt, error) {
 	row := q.db.QueryRow(ctx, createPromptSetting, arg.Name, arg.Value)
-	var i SettingsPrompt
+	var i AppSettingsPrompt
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -33,12 +33,12 @@ func (q *Queries) CreatePromptSetting(ctx context.Context, arg CreatePromptSetti
 }
 
 const getPromptSetting = `-- name: GetPromptSetting :one
-SELECT id, name, value, updated_at FROM settings_prompt WHERE name = $1
+SELECT id, name, value, updated_at FROM app_settings_prompt WHERE name = $1
 `
 
-func (q *Queries) GetPromptSetting(ctx context.Context, name string) (SettingsPrompt, error) {
+func (q *Queries) GetPromptSetting(ctx context.Context, name string) (AppSettingsPrompt, error) {
 	row := q.db.QueryRow(ctx, getPromptSetting, name)
-	var i SettingsPrompt
+	var i AppSettingsPrompt
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -49,7 +49,7 @@ func (q *Queries) GetPromptSetting(ctx context.Context, name string) (SettingsPr
 }
 
 const updatePromptSetting = `-- name: UpdatePromptSetting :exec
-UPDATE settings_prompt SET value = $1, updated_at = now()
+UPDATE app_settings_prompt SET value = $1, updated_at = now()
 WHERE name = $2
 `
 

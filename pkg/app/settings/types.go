@@ -18,7 +18,7 @@ type PromptSetting struct {
 	UpdatedAt time.Time
 }
 
-func PromptSettingFromDB(s db.SettingsPrompt) *PromptSetting {
+func PromptSettingFromDB(s db.AppSettingsPrompt) *PromptSetting {
 	return &PromptSetting{
 		ID:        s.ID,
 		Name:      s.Name,

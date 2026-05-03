@@ -36,8 +36,8 @@ type Session struct {
 	DeletedAt       *time.Time // nil = active, non-nil = soft deleted
 }
 
-// SessionFromDB constructs a chat.Session from a db.Session.
-func SessionFromDB(s db.Session) (*Session, error) {
+// SessionFromDB constructs a chat.Session from a db.AppChatSession.
+func SessionFromDB(s db.AppChatSession) (*Session, error) {
 	var contextMsgs []Message
 	if len(s.ContextMessages) > 0 {
 		if err := json.Unmarshal([]byte(s.ContextMessages), &contextMsgs); err != nil {

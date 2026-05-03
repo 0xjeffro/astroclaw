@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Message struct {
+type AppChatMessage struct {
 	ID             string
 	SessionID      string
 	Role           string
@@ -24,7 +24,7 @@ type Message struct {
 	UpdatedAt      time.Time
 }
 
-type Session struct {
+type AppChatSession struct {
 	ID              string
 	UserID          string
 	Title           string
@@ -38,14 +38,14 @@ type Session struct {
 	DeletedAt       *time.Time
 }
 
-type SessionMember struct {
+type AppChatSessionMember struct {
 	SessionID string
 	UserID    string
 	Role      string
 	JoinedAt  time.Time
 }
 
-type User struct {
+type AppChatUser struct {
 	ID        string
 	Email     string
 	Name      string

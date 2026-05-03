@@ -21,8 +21,8 @@ type Credential struct {
 	DeletedAt   *time.Time
 }
 
-// CredentialFromDB constructs a passwords.Credential from a db.Credential.
-func CredentialFromDB(c db.Credential) *Credential {
+// CredentialFromDB constructs a passwords.Credential from a db.AppPasswordsCredential.
+func CredentialFromDB(c db.AppPasswordsCredential) *Credential {
 	return &Credential{
 		ID:          c.ID,
 		Name:        c.Name,
