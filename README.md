@@ -158,3 +158,12 @@ If you changed the CDK stack, the snapshot test will fail. Review the diff, then
 ```bash
 npx jest --updateSnapshot
 ```
+
+### Tear down
+
+To destroy all deployed AWS resources:
+
+```bash
+cd deploy/aws/infra
+cdk destroy
+```
