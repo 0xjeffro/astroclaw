@@ -258,14 +258,12 @@ func main() {
 		case input == "":
 			continue
 		default:
-			_, err := backend.Reply(ctx, currentSession, defaultAgentID, input)
+			reply, err := backend.Reply(ctx, currentSession, defaultAgentID, input)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
-			// In local mode, OnTextDelta already printed the response
-			// token by token. Just add a newline to finish.
-			fmt.Println()
+			fmt.Println(reply)
 		}
 	}
 }
