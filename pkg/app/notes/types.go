@@ -8,6 +8,7 @@ import (
 
 type Memory struct {
 	ID         string
+	AgentID    string
 	Content    string
 	SessionID  string
 	MessageIDs []string // source messages this memory was derived from
@@ -17,6 +18,7 @@ type Memory struct {
 func MemoryFromDB(m db.AppNotesMemory, messageIDs []string) *Memory {
 	return &Memory{
 		ID:         m.ID,
+		AgentID:    m.AgentID,
 		Content:    m.Content,
 		SessionID:  m.SessionID,
 		MessageIDs: messageIDs,

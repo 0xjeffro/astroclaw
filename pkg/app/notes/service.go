@@ -21,8 +21,9 @@ func NewService(pool *pgxpool.Pool) *Service {
 
 // SaveMemory creates a new memory entry and links it to the source messages
 // it was derived from.
-func (svc *Service) SaveMemory(ctx context.Context, content, sessionID string, messageIDs []string) (*Memory, error) {
+func (svc *Service) SaveMemory(ctx context.Context, agentID, content, sessionID string, messageIDs []string) (*Memory, error) {
 	m, err := svc.queries.CreateMemory(ctx, db.CreateMemoryParams{
+		AgentID:   agentID,
 		Content:   content,
 		SessionID: sessionID,
 	})
@@ -42,9 +43,12 @@ func (svc *Service) SaveMemory(ctx context.Context, content, sessionID string, m
 	return MemoryFromDB(m, messageIDs), nil
 }
 
-// ListRecentMemories returns the most recent n memories.
-func (svc *Service) ListRecentMemories(ctx context.Context, limit int32) ([]*Memory, error) {
-	rows, err := svc.queries.ListRecentMemories(ctx, limit)
+// ListRecentMemories returns the most recent n memories for an agent.
+func (svc *Service) ListRecentMemories(ctx context.Context, agentID string, limit int32) ([]*Memory, error) {
+	rows, err := svc.queries.ListRecentMemories(ctx, db.ListRecentMemoriesParams{
+		AgentID: agentID,
+		Limit:   limit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list recent memories: %w", err)
 	}
@@ -56,10 +60,10 @@ func (svc *Service) ListRecentMemories(ctx context.Context, limit int32) ([]*Mem
 	return memories, nil
 }
 
-// FormatForPrompt returns all memories as a single string for injection
-// into the system prompt. Each memory is one line.
-func (svc *Service) FormatForPrompt(ctx context.Context, maxChars int) (string, error) {
-	rows, err := svc.queries.ListMemories(ctx)
+// FormatForPrompt returns all memories for an agent as a single string
+// for injection into the system prompt. Each memory is one line.
+func (svc *Service) FormatForPrompt(ctx context.Context, agentID string, maxChars int) (string, error) {
+	rows, err := svc.queries.ListMemories(ctx, agentID)
 	if err != nil {
 		return "", fmt.Errorf("list memories: %w", err)
 	}

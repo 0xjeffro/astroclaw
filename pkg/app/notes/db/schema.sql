@@ -5,6 +5,7 @@
 
 CREATE TABLE app_notes_memories (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id   UUID NOT NULL,
     content    TEXT NOT NULL,
     session_id UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -70,6 +70,7 @@ CREATE TABLE "public"."app_chat_users" (
 -- Create "app_notes_memories" table
 CREATE TABLE "public"."app_notes_memories" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "agent_id" uuid NOT NULL,
   "content" text NOT NULL,
   "session_id" uuid NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),

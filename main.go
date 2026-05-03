@@ -351,7 +351,8 @@ func initLocalBackend(ctx context.Context) *chat.Service {
 	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
 		cfg.User = user.Value
 	}
-	if memories, err := notesSvc.FormatForPrompt(ctx, agent.DefaultCharLimits().Memories); err == nil {
+	// TODO: pass real agent ID once multi-agent is wired up.
+	if memories, err := notesSvc.FormatForPrompt(ctx, "", agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
 	}
 	systemPrompt := agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())

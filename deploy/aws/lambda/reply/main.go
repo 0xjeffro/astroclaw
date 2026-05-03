@@ -99,7 +99,8 @@ func buildPrompt(ctx context.Context, settingsSvc *settings.Service, notesSvc *n
 	if user, err := settingsSvc.GetPromptSetting(ctx, "user"); err == nil {
 		cfg.User = user.Value
 	}
-	if memories, err := notesSvc.FormatForPrompt(ctx, agent.DefaultCharLimits().Memories); err == nil {
+	// TODO: pass real agent ID once multi-agent is wired up.
+	if memories, err := notesSvc.FormatForPrompt(ctx, "", agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
 	}
 	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
