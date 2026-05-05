@@ -237,6 +237,108 @@ export class InfraStack extends cdk.Stack {
       description: 'Function URL endpoint (reply/agent)',
     });
 
+    // WebSocket API for real-time event push (text streaming, tool status, etc.).
+    // Clients connect with: wss://xxx.execute-api.region.amazonaws.com/prod?user_id=xxx&api_key=xxx
+    // https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html
+    const wsConnectHandler = new lambda.Function(this, 'WsConnectHandler', {
+      runtime: lambda.Runtime.PROVIDED_AL2023,
+      handler: 'bootstrap',
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(projectRoot, {
+        bundling: {
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                execSync(
+                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsconnect`,
+                    { cwd: projectRoot, stdio: 'inherit' },
+                );
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
+          command: [
+            'bash', '-c',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsconnect',
+          ],
+        },
+      }),
+      environment: {
+        DSQL_ENDPOINT: cluster.attrEndpoint,
+      },
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+    });
+
+    const wsDisconnectHandler = new lambda.Function(this, 'WsDisconnectHandler', {
+      runtime: lambda.Runtime.PROVIDED_AL2023,
+      handler: 'bootstrap',
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(projectRoot, {
+        bundling: {
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                execSync(
+                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsdisconnect`,
+                    { cwd: projectRoot, stdio: 'inherit' },
+                );
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
+          command: [
+            'bash', '-c',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsdisconnect',
+          ],
+        },
+      }),
+      environment: {
+        DSQL_ENDPOINT: cluster.attrEndpoint,
+      },
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+    });
+
+    // DSQL access for WebSocket Lambdas.
+    wsConnectHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
+    wsDisconnectHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
+
+    const wsApi = new apigwv2.WebSocketApi(this, 'WebSocketApi', {
+      apiName: 'astroclaw-ws',
+    });
+
+    wsApi.addRoute('$connect', {
+      integration: new integrations.WebSocketLambdaIntegration('WsConnectIntegration', wsConnectHandler),
+    });
+
+    wsApi.addRoute('$disconnect', {
+      integration: new integrations.WebSocketLambdaIntegration('WsDisconnectIntegration', wsDisconnectHandler),
+    });
+
+    const wsStage = new apigwv2.WebSocketStage(this, 'WebSocketStage', {
+      webSocketApi: wsApi,
+      stageName: 'prod',
+      autoDeploy: true,
+    });
+
+    new cdk.CfnOutput(this, 'WebSocketUrl', {
+      value: wsStage.url,
+      description: 'WebSocket endpoint for real-time events',
+    });
+
     new cdk.CfnOutput(this, 'GeneratedApiKey', {
       value: generatedApiKey,
       description: 'SAVE THIS NOW. Use it in the x-api-key header for all API requests.',

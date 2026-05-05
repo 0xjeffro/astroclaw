@@ -50,6 +50,29 @@ exports[`snapshot 1`] = `
         ],
       },
     },
+    "WebSocketUrl": {
+      "Description": "WebSocket endpoint for real-time events",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "wss://",
+            {
+              "Ref": "WebSocketApi34BCF99B",
+            },
+            ".execute-api.",
+            {
+              "Ref": "AWS::Region",
+            },
+            ".",
+            {
+              "Ref": "AWS::URLSuffix",
+            },
+            "/prod",
+          ],
+        ],
+      },
+    },
   },
   "Parameters": {
     "AnthropicApiKey": {
@@ -647,6 +670,394 @@ exports[`snapshot 1`] = `
       },
       "Type": "AWS::CloudFormation::CustomResource",
       "UpdateReplacePolicy": "Delete",
+    },
+    "WebSocketApi34BCF99B": {
+      "Properties": {
+        "Name": "astroclaw-ws",
+        "ProtocolType": "WEBSOCKET",
+        "RouteSelectionExpression": "$request.body.action",
+      },
+      "Type": "AWS::ApiGatewayV2::Api",
+    },
+    "WebSocketApiconnectRoute846149DD": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "WebSocketApi34BCF99B",
+        },
+        "AuthorizationType": "NONE",
+        "RouteKey": "$connect",
+        "Target": {
+          "Fn::Join": [
+            "",
+            [
+              "integrations/",
+              {
+                "Ref": "WebSocketApiconnectRouteWsConnectIntegrationFB6DEA67",
+              },
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::ApiGatewayV2::Route",
+    },
+    "WebSocketApiconnectRouteWsConnectIntegrationFB6DEA67": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "WebSocketApi34BCF99B",
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":apigateway:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":lambda:path/2015-03-31/functions/",
+              {
+                "Fn::GetAtt": [
+                  "WsConnectHandler224A8AE8",
+                  "Arn",
+                ],
+              },
+              "/invocations",
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::ApiGatewayV2::Integration",
+    },
+    "WebSocketApiconnectRouteWsConnectIntegrationPermission2256A8D8": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WsConnectHandler224A8AE8",
+            "Arn",
+          ],
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId",
+              },
+              ":",
+              {
+                "Ref": "WebSocketApi34BCF99B",
+              },
+              "/*$connect",
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::Lambda::Permission",
+    },
+    "WebSocketApidisconnectRouteC181A19C": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "WebSocketApi34BCF99B",
+        },
+        "AuthorizationType": "NONE",
+        "RouteKey": "$disconnect",
+        "Target": {
+          "Fn::Join": [
+            "",
+            [
+              "integrations/",
+              {
+                "Ref": "WebSocketApidisconnectRouteWsDisconnectIntegration29C46878",
+              },
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::ApiGatewayV2::Route",
+    },
+    "WebSocketApidisconnectRouteWsDisconnectIntegration29C46878": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "WebSocketApi34BCF99B",
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":apigateway:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":lambda:path/2015-03-31/functions/",
+              {
+                "Fn::GetAtt": [
+                  "WsDisconnectHandler2953FE4B",
+                  "Arn",
+                ],
+              },
+              "/invocations",
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::ApiGatewayV2::Integration",
+    },
+    "WebSocketApidisconnectRouteWsDisconnectIntegrationPermission0D98673D": {
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "WsDisconnectHandler2953FE4B",
+            "Arn",
+          ],
+        },
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":execute-api:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":",
+              {
+                "Ref": "AWS::AccountId",
+              },
+              ":",
+              {
+                "Ref": "WebSocketApi34BCF99B",
+              },
+              "/*$disconnect",
+            ],
+          ],
+        },
+      },
+      "Type": "AWS::Lambda::Permission",
+    },
+    "WebSocketStageC46B7E43": {
+      "Properties": {
+        "ApiId": {
+          "Ref": "WebSocketApi34BCF99B",
+        },
+        "AutoDeploy": true,
+        "StageName": "prod",
+      },
+      "Type": "AWS::ApiGatewayV2::Stage",
+    },
+    "WsConnectHandler224A8AE8": {
+      "DependsOn": [
+        "WsConnectHandlerServiceRoleDefaultPolicy3AF554A0",
+        "WsConnectHandlerServiceRole3D4F3D4A",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "[ASSET HASH].zip",
+        },
+        "Environment": {
+          "Variables": {
+            "DSQL_ENDPOINT": {
+              "Fn::GetAtt": [
+                "DsqlCluster",
+                "Endpoint",
+              ],
+            },
+          },
+        },
+        "Handler": "bootstrap",
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "WsConnectHandlerServiceRole3D4F3D4A",
+            "Arn",
+          ],
+        },
+        "Runtime": "provided.al2023",
+        "Timeout": 10,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "WsConnectHandlerServiceRole3D4F3D4A": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "WsConnectHandlerServiceRoleDefaultPolicy3AF554A0": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "dsql:DbConnectAdmin",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DsqlCluster",
+                  "ResourceArn",
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "WsConnectHandlerServiceRoleDefaultPolicy3AF554A0",
+        "Roles": [
+          {
+            "Ref": "WsConnectHandlerServiceRole3D4F3D4A",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
+    },
+    "WsDisconnectHandler2953FE4B": {
+      "DependsOn": [
+        "WsDisconnectHandlerServiceRoleDefaultPolicy20B4126C",
+        "WsDisconnectHandlerServiceRole5F4DAA34",
+      ],
+      "Properties": {
+        "Architectures": [
+          "arm64",
+        ],
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "[ASSET HASH].zip",
+        },
+        "Environment": {
+          "Variables": {
+            "DSQL_ENDPOINT": {
+              "Fn::GetAtt": [
+                "DsqlCluster",
+                "Endpoint",
+              ],
+            },
+          },
+        },
+        "Handler": "bootstrap",
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "WsDisconnectHandlerServiceRole5F4DAA34",
+            "Arn",
+          ],
+        },
+        "Runtime": "provided.al2023",
+        "Timeout": 10,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "WsDisconnectHandlerServiceRole5F4DAA34": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              ],
+            ],
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
+    },
+    "WsDisconnectHandlerServiceRoleDefaultPolicy20B4126C": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "dsql:DbConnectAdmin",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "DsqlCluster",
+                  "ResourceArn",
+                ],
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "PolicyName": "WsDisconnectHandlerServiceRoleDefaultPolicy20B4126C",
+        "Roles": [
+          {
+            "Ref": "WsDisconnectHandlerServiceRole5F4DAA34",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Policy",
     },
   },
   "Rules": {
