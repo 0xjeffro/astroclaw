@@ -6,6 +6,7 @@ import (
 	"iclaw/pkg/app/chat"
 	"iclaw/pkg/app/passwords"
 	"iclaw/pkg/app/settings"
+	"iclaw/pkg/app/system"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 var (
 	svc         *chat.Service
 	settingsSvc *settings.Service
+	systemSvc   *system.Service
 	apiKey      string
 )
 
@@ -45,6 +47,7 @@ func init() {
 	}
 
 	settingsSvc = settings.NewService(pool)
+	systemSvc = system.NewService(pool)
 
 	// Session CRUD doesn't need LLM provider or tools, pass nil for createFn.
 	svc = chat.NewService(pool, nil)
@@ -72,6 +75,8 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	case method == "GET" && strings.HasPrefix(path, "/settings/"):
 		name := strings.TrimPrefix(path, "/settings/")
 		return handleGetSetting(ctx, name)
+	case method == "GET" && path == "/users/owner":
+		return handleGetOwner(ctx)
 	}
 
 	return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
@@ -123,6 +128,14 @@ func handleGetSetting(ctx context.Context, name string) (events.APIGatewayV2HTTP
 		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusOK, s)
+}
+
+func handleGetOwner(ctx context.Context) (events.APIGatewayV2HTTPResponse, error) {
+	u, err := systemSvc.GetOwner(ctx)
+	if err != nil {
+		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+	return jsonResponse(http.StatusOK, u)
 }
 
 func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error) {

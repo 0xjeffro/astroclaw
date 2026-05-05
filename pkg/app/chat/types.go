@@ -14,14 +14,6 @@ var (
 	ErrNotFound = errors.New("not found") // session or message doesn't exist
 )
 
-type User struct {
-	ID        string
-	Email     string
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
 type Session struct {
 	ID              string
 	UserID          string

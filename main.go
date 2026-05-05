@@ -88,6 +88,20 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 	return nil
 }
 
+func (r *remoteBackend) GetOwnerID(ctx context.Context) (string, error) {
+	resp, err := r.get(ctx, "/users/owner")
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return "", fmt.Errorf("parse owner response: %w", err)
+	}
+	return result.ID, nil
+}
+
 func (r *remoteBackend) GetSetting(ctx context.Context, name string) (string, error) {
 	resp, err := r.get(ctx, "/settings/"+name)
 	if err != nil {
@@ -186,14 +200,18 @@ func main() {
 	backend := newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
 	fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
 
-	// Fetch default agent ID from settings.
+	// Fetch owner user ID and default agent ID.
+	ownerID, err := backend.GetOwnerID(ctx)
+	if err != nil {
+		log.Fatalf("failed to get owner: %v", err)
+	}
 	defaultAgentID, err := backend.GetSetting(ctx, settings.SettingDefaultAgentID)
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}
 
-	// Create a default session on startup with the default agent.
-	defaultSession, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", []string{defaultAgentID}, "default")
+	// Create a default session on startup with the owner and default agent.
+	defaultSession, err := backend.NewSession(ctx, ownerID, []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -229,7 +247,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := backend.NewSession(ctx, "00000000-0000-0000-0000-000000000000", []string{defaultAgentID}, title)
+			s, err := backend.NewSession(ctx, ownerID, []string{defaultAgentID}, title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue

@@ -31,6 +31,7 @@ import (
 	"iclaw/pkg/app/agents"
 	"iclaw/pkg/app/passwords"
 	"iclaw/pkg/app/settings"
+	"iclaw/pkg/app/system"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
@@ -80,6 +81,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	}
 
 	if err := seedSettings(ctx, pool); err != nil {
+		return nil, err
+	}
+
+	if err := seedDefaultUser(ctx, pool); err != nil {
 		return nil, err
 	}
 
@@ -253,6 +258,24 @@ func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
 			log.Printf("seeded setting: %s", d.name)
 		}
 	}
+	return nil
+}
+
+// seedDefaultUser creates the owner user on first deploy if none exists.
+func seedDefaultUser(ctx context.Context, pool *pgxpool.Pool) error {
+	svc := system.NewService(pool)
+
+	if _, err := svc.GetOwner(ctx); err == nil {
+		log.Println("owner user already exists, skipping seed")
+		return nil
+	}
+
+	u, err := svc.CreateUser(ctx, "owner@astroclaw.local", "Owner", system.RoleOwner)
+	if err != nil {
+		return fmt.Errorf("seed owner user: %w", err)
+	}
+	log.Printf("seeded owner user: %s (%s)", u.Name, u.ID)
+
 	return nil
 }
 

@@ -57,16 +57,6 @@ CREATE TABLE "public"."app_chat_sessions" (
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id")
 );
--- Create "app_chat_users" table
-CREATE TABLE "public"."app_chat_users" (
-  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-  "email" text NOT NULL,
-  "name" text NOT NULL,
-  "created_at" timestamptz NOT NULL DEFAULT now(),
-  "updated_at" timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY ("id"),
-  CONSTRAINT "app_chat_users_email_key" UNIQUE ("email")
-);
 -- Create "app_notes_memories" table
 CREATE TABLE "public"."app_notes_memories" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -101,4 +91,22 @@ CREATE TABLE "public"."app_settings_kv" (
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("id"),
   CONSTRAINT "app_settings_kv_name_key" UNIQUE ("name")
+);
+-- Create "app_system_connections" table
+CREATE TABLE "public"."app_system_connections" (
+  "connection_id" text NOT NULL,
+  "user_id" uuid NOT NULL,
+  "connected_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("connection_id")
+);
+-- Create "app_system_users" table
+CREATE TABLE "public"."app_system_users" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "email" text NOT NULL,
+  "name" text NOT NULL,
+  "role" text NOT NULL DEFAULT 'guest',
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "app_system_users_email_key" UNIQUE ("email")
 );
