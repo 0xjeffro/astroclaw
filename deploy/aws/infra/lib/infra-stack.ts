@@ -27,12 +27,19 @@ export class InfraStack extends cdk.Stack {
     // API authentication key. When GenerateApiKey=true, a random key is
     // generated at synth time, passed to migrate Lambda to seed into
     // credentials table, and printed in the stack output.
-    // Default is false so subsequent deploys don't overwrite existing keys.
+    //
+    // IMPORTANT: always pass this parameter explicitly on every deploy.
+    // CloudFormation retains the previous parameter value when omitted,
+    // so if you deployed with true once and then omit the parameter,
+    // it stays true and overwrites your API key with a new one.
+    //
+    // First deploy:      --parameters GenerateApiKey=true
+    // Subsequent deploys: --parameters GenerateApiKey=false
     const generateApiKey = new cdk.CfnParameter(this, 'GenerateApiKey', {
       type: 'String',
       default: 'false',
       allowedValues: ['true', 'false'],
-      description: 'Generate a new API key for authentication. Only set to true on first deploy or to rotate.',
+      description: 'ALWAYS pass explicitly. true = generate new key (overwrites existing). false = keep existing key.',
     });
 
     const generatedApiKey = crypto.randomUUID();
