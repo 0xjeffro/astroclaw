@@ -61,14 +61,14 @@ func (svc *Service) ListUsers(ctx context.Context) ([]*User, error) {
 
 // Connections
 
-func (svc *Service) ConnectWS(ctx context.Context, connectionID, userID string) error {
+func (svc *Service) CreateWSConnectRecord(ctx context.Context, connectionID, userID string) error {
 	return svc.queries.CreateConnection(ctx, db.CreateConnectionParams{
 		ConnectionID: connectionID,
 		UserID:       userID,
 	})
 }
 
-func (svc *Service) DisconnectWS(ctx context.Context, connectionID string) error {
+func (svc *Service) DeleteWSConnectRecord(ctx context.Context, connectionID string) error {
 	return svc.queries.DeleteConnection(ctx, connectionID)
 }
 

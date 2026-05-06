@@ -41,7 +41,6 @@ type AppChatSession struct {
 type AppChatSessionAgent struct {
 	SessionID string
 	AgentID   string
-	Role      string
 	JoinedAt  time.Time
 }
 

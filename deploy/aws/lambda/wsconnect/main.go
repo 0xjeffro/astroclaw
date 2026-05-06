@@ -81,7 +81,7 @@ func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (e
 
 	// Store connection.
 	connectionID := req.RequestContext.ConnectionID
-	if err := systemSvc.ConnectWS(ctx, connectionID, userID); err != nil {
+	if err := systemSvc.CreateWSConnectRecord(ctx, connectionID, userID); err != nil {
 		log.Printf("failed to store connection %s: %v", connectionID, err)
 		return events.APIGatewayProxyResponse{StatusCode: 500}, nil
 	}

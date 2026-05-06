@@ -51,10 +51,15 @@ func SessionFromDB(s db.AppChatSession) (*Session, error) {
 	}, nil
 }
 
+const (
+	MemberRoleOwner = "owner"
+	MemberRoleGuest = "guest"
+)
+
 type SessionMember struct {
 	SessionID string
 	UserID    string
-	Role      string // "owner" | "guest"
+	Role      string
 	JoinedAt  time.Time
 }
 

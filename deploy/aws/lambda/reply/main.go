@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iclaw/pkg/agent"
 	"iclaw/pkg/app/agents"
@@ -10,6 +11,7 @@ import (
 	"iclaw/pkg/app/notes"
 	"iclaw/pkg/app/passwords"
 	"iclaw/pkg/app/settings"
+	"iclaw/pkg/app/system"
 	"iclaw/pkg/provider"
 	"iclaw/pkg/tool"
 	"log"
@@ -19,12 +21,17 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
+	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
 var (
-	svc    *chat.Service
-	apiKey string
+	svc         *chat.Service
+	systemSvc   *system.Service
+	apigwClient *apigatewaymanagementapi.Client
+	apiKey      string
 )
 
 // Init runs once when Lambda cold-starts. Connects to DSQL, sets up
@@ -39,6 +46,18 @@ func init() {
 	if err != nil {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
+
+	systemSvc = system.NewService(pool)
+
+	// API Gateway Management API client for pushing WebSocket events.
+	// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
+	awsCfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("load AWS config: %v", err)
+	}
+	apigwClient = apigatewaymanagementapi.NewFromConfig(awsCfg, func(o *apigatewaymanagementapi.Options) {
+		o.BaseEndpoint = new(os.Getenv("WS_ENDPOINT"))
+	})
 
 	// Read credentials.
 	pwSvc := passwords.NewService(pool)
@@ -146,6 +165,48 @@ func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error)
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(b),
 	}, nil
+}
+
+// pushToSession pushes a WebSocket event to all connected members of a session.
+// It queries session members, looks up each member's active connections, and
+// calls PostToConnection for each one. Dead connections (410 Gone) are cleaned up.
+func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
+	members, err := svc.ListSessionMembers(ctx, sessionID)
+	if err != nil {
+		log.Printf("pushToSession: list members for session %s: %v", sessionID, err)
+		return
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("pushToSession: marshal event: %v", err)
+		return
+	}
+
+	for _, m := range members {
+		conns, err := systemSvc.GetConnectionsByUser(ctx, m.UserID)
+		if err != nil {
+			log.Printf("pushToSession: get connections for user %s: %v", m.UserID, err)
+			continue
+		}
+		for _, c := range conns {
+			_, err := apigwClient.PostToConnection(ctx, &apigatewaymanagementapi.PostToConnectionInput{
+				ConnectionId: &c.ConnectionID,
+				Data:         payload,
+			})
+			if err != nil {
+				// 410 Gone means the client disconnected but $disconnect didn't fire.
+				// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
+				// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types#GoneException
+				if _, ok := errors.AsType[*apigwtypes.GoneException](err); ok {
+					log.Printf("pushToSession: connection %s is gone, cleaning up", c.ConnectionID)
+					_ = systemSvc.DeleteWSConnectRecord(ctx, c.ConnectionID)
+					continue
+				}
+				log.Printf("pushToSession: post to connection %s: %v", c.ConnectionID, err)
+			}
+		}
+	}
 }
 
 func main() {

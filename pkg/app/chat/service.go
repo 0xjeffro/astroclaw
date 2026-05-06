@@ -32,6 +32,12 @@ func NewService(
 	}
 }
 
+// NewSession creates a session and writes the initial participants in one transaction.
+//   - userID: the person creating the session, automatically added as "owner" in session_members.
+//   - agentIDs: all agents participating in this session, each added to session_agents.
+//
+// TODO: accept a memberIDs []string parameter for group chat, so the caller
+// can invite other users at creation time.
 func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []string, title string) (*Session, error) {
 	tx, err := svc.pool.Begin(ctx)
 	if err != nil {
@@ -54,10 +60,17 @@ func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []st
 		if err := qtx.AddSessionAgent(ctx, db.AddSessionAgentParams{
 			SessionID: s.ID,
 			AgentID:   agentID,
-			Role:      "primary",
 		}); err != nil {
 			return nil, fmt.Errorf("add agent %s to session: %w", agentID, err)
 		}
+	}
+
+	if err := qtx.AddSessionMember(ctx, db.AddSessionMemberParams{
+		SessionID: s.ID,
+		UserID:    userID,
+		Role:      MemberRoleOwner,
+	}); err != nil {
+		return nil, fmt.Errorf("add owner to session members: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -96,6 +109,23 @@ func (svc *Service) GetSession(ctx context.Context, id string) (*Session, error)
 		return nil, fmt.Errorf("parse session: %w", err)
 	}
 	return session, nil
+}
+
+func (svc *Service) ListSessionMembers(ctx context.Context, sessionID string) ([]*SessionMember, error) {
+	rows, err := svc.queries.ListSessionMembers(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list session members: %w", err)
+	}
+	members := make([]*SessionMember, len(rows))
+	for i, m := range rows {
+		members[i] = &SessionMember{
+			SessionID: m.SessionID,
+			UserID:    m.UserID,
+			Role:      m.Role,
+			JoinedAt:  m.JoinedAt,
+		}
+	}
+	return members, nil
 }
 
 func (svc *Service) SoftDeleteSession(ctx context.Context, id string) error {

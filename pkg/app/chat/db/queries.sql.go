@@ -12,18 +12,33 @@ import (
 )
 
 const addSessionAgent = `-- name: AddSessionAgent :exec
-INSERT INTO app_chat_session_agents (session_id, agent_id, role)
-VALUES ($1, $2, $3)
+INSERT INTO app_chat_session_agents (session_id, agent_id)
+VALUES ($1, $2)
 `
 
 type AddSessionAgentParams struct {
 	SessionID string
 	AgentID   string
-	Role      string
 }
 
 func (q *Queries) AddSessionAgent(ctx context.Context, arg AddSessionAgentParams) error {
-	_, err := q.db.Exec(ctx, addSessionAgent, arg.SessionID, arg.AgentID, arg.Role)
+	_, err := q.db.Exec(ctx, addSessionAgent, arg.SessionID, arg.AgentID)
+	return err
+}
+
+const addSessionMember = `-- name: AddSessionMember :exec
+INSERT INTO app_chat_session_members (session_id, user_id, role)
+VALUES ($1, $2, $3)
+`
+
+type AddSessionMemberParams struct {
+	SessionID string
+	UserID    string
+	Role      string
+}
+
+func (q *Queries) AddSessionMember(ctx context.Context, arg AddSessionMemberParams) error {
+	_, err := q.db.Exec(ctx, addSessionMember, arg.SessionID, arg.UserID, arg.Role)
 	return err
 }
 
@@ -115,6 +130,20 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (A
 	return i, err
 }
 
+const deleteSessionMember = `-- name: DeleteSessionMember :exec
+DELETE FROM app_chat_session_members WHERE session_id = $1 AND user_id = $2
+`
+
+type DeleteSessionMemberParams struct {
+	SessionID string
+	UserID    string
+}
+
+func (q *Queries) DeleteSessionMember(ctx context.Context, arg DeleteSessionMemberParams) error {
+	_, err := q.db.Exec(ctx, deleteSessionMember, arg.SessionID, arg.UserID)
+	return err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE id = $1 AND deleted_at IS NULL
 `
@@ -175,7 +204,7 @@ func (q *Queries) ListMessages(ctx context.Context, sessionID string) ([]AppChat
 }
 
 const listSessionAgents = `-- name: ListSessionAgents :many
-SELECT session_id, agent_id, role, joined_at FROM app_chat_session_agents WHERE session_id = $1
+SELECT session_id, agent_id, joined_at FROM app_chat_session_agents WHERE session_id = $1
 `
 
 func (q *Queries) ListSessionAgents(ctx context.Context, sessionID string) ([]AppChatSessionAgent, error) {
@@ -187,9 +216,33 @@ func (q *Queries) ListSessionAgents(ctx context.Context, sessionID string) ([]Ap
 	var items []AppChatSessionAgent
 	for rows.Next() {
 		var i AppChatSessionAgent
+		if err := rows.Scan(&i.SessionID, &i.AgentID, &i.JoinedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionMembers = `-- name: ListSessionMembers :many
+SELECT session_id, user_id, role, joined_at FROM app_chat_session_members WHERE session_id = $1
+`
+
+func (q *Queries) ListSessionMembers(ctx context.Context, sessionID string) ([]AppChatSessionMember, error) {
+	rows, err := q.db.Query(ctx, listSessionMembers, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AppChatSessionMember
+	for rows.Next() {
+		var i AppChatSessionMember
 		if err := rows.Scan(
 			&i.SessionID,
-			&i.AgentID,
+			&i.UserID,
 			&i.Role,
 			&i.JoinedAt,
 		); err != nil {

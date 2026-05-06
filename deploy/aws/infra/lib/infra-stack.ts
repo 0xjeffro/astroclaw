@@ -93,6 +93,104 @@ export class InfraStack extends cdk.Stack {
       memorySize: 256,
     });
 
+    const wsApi = new apigwv2.WebSocketApi(this, 'WebSocketApi', {
+      apiName: 'astroclaw-ws',
+    });
+
+    // WebSocket API for real-time event push (text streaming, tool status, etc.).
+    // Clients connect with: wss://xxx.execute-api.region.amazonaws.com/prod?user_id=xxx&api_key=xxx
+    // https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html
+    const wsConnectHandler = new lambda.Function(this, 'WsConnectHandler', {
+      runtime: lambda.Runtime.PROVIDED_AL2023,
+      handler: 'bootstrap',
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(projectRoot, {
+        bundling: {
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                execSync(
+                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsconnect`,
+                    { cwd: projectRoot, stdio: 'inherit' },
+                );
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
+          command: [
+            'bash', '-c',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsconnect',
+          ],
+        },
+      }),
+      environment: {
+        DSQL_ENDPOINT: cluster.attrEndpoint,
+      },
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+    });
+
+    const wsDisconnectHandler = new lambda.Function(this, 'WsDisconnectHandler', {
+      runtime: lambda.Runtime.PROVIDED_AL2023,
+      handler: 'bootstrap',
+      architecture: lambda.Architecture.ARM_64,
+      code: lambda.Code.fromAsset(projectRoot, {
+        bundling: {
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                execSync(
+                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsdisconnect`,
+                    { cwd: projectRoot, stdio: 'inherit' },
+                );
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          image: cdk.DockerImage.fromRegistry('golang:1.26'),
+          command: [
+            'bash', '-c',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsdisconnect',
+          ],
+        },
+      }),
+      environment: {
+        DSQL_ENDPOINT: cluster.attrEndpoint,
+      },
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+    });
+
+    // DSQL access for WebSocket Lambdas.
+    wsConnectHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
+    wsDisconnectHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['dsql:DbConnectAdmin'],
+      resources: [cluster.attrResourceArn],
+    }));
+
+    wsApi.addRoute('$connect', {
+      integration: new integrations.WebSocketLambdaIntegration('WsConnectIntegration', wsConnectHandler),
+    });
+
+    wsApi.addRoute('$disconnect', {
+      integration: new integrations.WebSocketLambdaIntegration('WsDisconnectIntegration', wsDisconnectHandler),
+    });
+
+    // API Gateway Stage docs: https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api-deployment.html
+    const wsStage = new apigwv2.WebSocketStage(this, 'WebSocketStage', {
+      webSocketApi: wsApi,
+      stageName: 'prod',
+      autoDeploy: true,
+    });
+
     // Reply Lambda: handles /reply requests with agent loop + LLM calls.
     // Uses Function URL instead of API Gateway to avoid the 30-second timeout.
     // https://docs.aws.amazon.com/lambda/latest/dg/urls-invocation.html
@@ -124,10 +222,22 @@ export class InfraStack extends cdk.Stack {
       }),
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
+        WS_ENDPOINT: wsStage.callbackUrl,
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
     });
+
+    // Allow Reply Lambda to push events to WebSocket clients via PostToConnection.
+    // PostToConnection is part of the API Gateway Management API (@connections),
+    // which requires execute-api:ManageConnections permission on the WebSocket API.
+    // https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
+    replyHandler.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['execute-api:ManageConnections'],
+      resources: [
+        `arn:aws:execute-api:${this.region}:${this.account}:${wsApi.apiId}/*`,
+      ],
+    }));
 
     // Function URL for Reply Lambda (no API Gateway timeout limit).
     const replyUrl = replyHandler.addFunctionUrl({
@@ -235,103 +345,6 @@ export class InfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ReplyUrl', {
       value: replyUrl.url,
       description: 'Function URL endpoint (reply/agent)',
-    });
-
-    // WebSocket API for real-time event push (text streaming, tool status, etc.).
-    // Clients connect with: wss://xxx.execute-api.region.amazonaws.com/prod?user_id=xxx&api_key=xxx
-    // https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-websocket-api.html
-    const wsConnectHandler = new lambda.Function(this, 'WsConnectHandler', {
-      runtime: lambda.Runtime.PROVIDED_AL2023,
-      handler: 'bootstrap',
-      architecture: lambda.Architecture.ARM_64,
-      code: lambda.Code.fromAsset(projectRoot, {
-        bundling: {
-          local: {
-            tryBundle(outputDir: string): boolean {
-              try {
-                execSync(
-                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsconnect`,
-                    { cwd: projectRoot, stdio: 'inherit' },
-                );
-                return true;
-              } catch {
-                return false;
-              }
-            },
-          },
-          image: cdk.DockerImage.fromRegistry('golang:1.26'),
-          command: [
-            'bash', '-c',
-            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsconnect',
-          ],
-        },
-      }),
-      environment: {
-        DSQL_ENDPOINT: cluster.attrEndpoint,
-      },
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-    });
-
-    const wsDisconnectHandler = new lambda.Function(this, 'WsDisconnectHandler', {
-      runtime: lambda.Runtime.PROVIDED_AL2023,
-      handler: 'bootstrap',
-      architecture: lambda.Architecture.ARM_64,
-      code: lambda.Code.fromAsset(projectRoot, {
-        bundling: {
-          local: {
-            tryBundle(outputDir: string): boolean {
-              try {
-                execSync(
-                    `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/wsdisconnect`,
-                    { cwd: projectRoot, stdio: 'inherit' },
-                );
-                return true;
-              } catch {
-                return false;
-              }
-            },
-          },
-          image: cdk.DockerImage.fromRegistry('golang:1.26'),
-          command: [
-            'bash', '-c',
-            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/wsdisconnect',
-          ],
-        },
-      }),
-      environment: {
-        DSQL_ENDPOINT: cluster.attrEndpoint,
-      },
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-    });
-
-    // DSQL access for WebSocket Lambdas.
-    wsConnectHandler.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['dsql:DbConnectAdmin'],
-      resources: [cluster.attrResourceArn],
-    }));
-    wsDisconnectHandler.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['dsql:DbConnectAdmin'],
-      resources: [cluster.attrResourceArn],
-    }));
-
-    const wsApi = new apigwv2.WebSocketApi(this, 'WebSocketApi', {
-      apiName: 'astroclaw-ws',
-    });
-
-    wsApi.addRoute('$connect', {
-      integration: new integrations.WebSocketLambdaIntegration('WsConnectIntegration', wsConnectHandler),
-    });
-
-    wsApi.addRoute('$disconnect', {
-      integration: new integrations.WebSocketLambdaIntegration('WsDisconnectIntegration', wsDisconnectHandler),
-    });
-
-    const wsStage = new apigwv2.WebSocketStage(this, 'WebSocketStage', {
-      webSocketApi: wsApi,
-      stageName: 'prod',
-      autoDeploy: true,
     });
 
     new cdk.CfnOutput(this, 'WebSocketUrl', {

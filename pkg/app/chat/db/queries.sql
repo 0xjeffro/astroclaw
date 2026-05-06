@@ -19,8 +19,8 @@ SELECT * FROM app_chat_sessions WHERE deleted_at IS NULL ORDER BY created_at DES
 SELECT * FROM app_chat_sessions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC;
 
 -- name: AddSessionAgent :exec
-INSERT INTO app_chat_session_agents (session_id, agent_id, role)
-VALUES ($1, $2, $3);
+INSERT INTO app_chat_session_agents (session_id, agent_id)
+VALUES ($1, $2);
 
 -- name: ListSessionAgents :many
 SELECT * FROM app_chat_session_agents WHERE session_id = $1;
@@ -35,3 +35,14 @@ RETURNING *;
 
 -- name: ListMessages :many
 SELECT * FROM app_chat_messages WHERE session_id = $1 ORDER BY sequence_number;
+
+
+-- name: AddSessionMember :exec
+INSERT INTO app_chat_session_members (session_id, user_id, role)
+VALUES ($1, $2, $3);
+
+-- name: ListSessionMembers :many
+SELECT * FROM app_chat_session_members WHERE session_id = $1;
+
+-- name: DeleteSessionMember :exec
+DELETE FROM app_chat_session_members WHERE session_id = $1 AND user_id = $2;

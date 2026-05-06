@@ -45,7 +45,7 @@ func init() {
 func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
 	connectionID := req.RequestContext.ConnectionID
 
-	if err := systemSvc.DisconnectWS(ctx, connectionID); err != nil {
+	if err := systemSvc.DeleteWSConnectRecord(ctx, connectionID); err != nil {
 		log.Printf("failed to delete connection %s: %v", connectionID, err)
 	}
 

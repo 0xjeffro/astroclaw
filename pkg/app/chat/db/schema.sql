@@ -35,7 +35,6 @@ CREATE TABLE app_chat_session_members (
 CREATE TABLE app_chat_session_agents (
     session_id UUID NOT NULL,
     agent_id   UUID NOT NULL,
-    role       TEXT NOT NULL DEFAULT 'primary',
     joined_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (session_id, agent_id)
 );
