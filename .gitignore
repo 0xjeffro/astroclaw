@@ -34,3 +34,4 @@ go.work.sum
 .DS_Store
 
 .claude/settings.local.json
+docs
