@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as crypto from 'crypto';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { InfraStack } from '../lib/infra-stack';
 
 // Fix non-deterministic values so snapshot tests are stable.
@@ -100,4 +100,47 @@ test('API URL output exists', () => {
   const template = createTemplate();
   const outputs = template.findOutputs('*');
   expect(Object.keys(outputs).length).toBeGreaterThanOrEqual(1);
+});
+
+// Verifies the WebSocket API is created.
+test('WebSocket API exists', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
+    Name: 'astroclaw-ws',
+    ProtocolType: 'WEBSOCKET',
+  });
+});
+
+// Verifies $connect and $disconnect routes are configured.
+test('WebSocket has $connect and $disconnect routes', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+    RouteKey: '$connect',
+  });
+  template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+    RouteKey: '$disconnect',
+  });
+});
+
+// Verifies WebSocket connect/disconnect Lambdas have correct timeout (10s).
+test('WebSocket Lambdas have 10s timeout', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Timeout: 10,
+    MemorySize: 128,
+  });
+});
+
+// Verifies Reply Lambda has execute-api:ManageConnections for WebSocket push.
+test('Reply Lambda has ManageConnections permission', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Action: 'execute-api:ManageConnections',
+        }),
+      ]),
+    },
+  });
 });

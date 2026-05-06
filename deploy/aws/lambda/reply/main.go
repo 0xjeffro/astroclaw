@@ -109,10 +109,49 @@ func init() {
 			SessionID: s.ID,
 		})
 
-		return agent.NewFromContext(
+		a := agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
 			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
-		), nil
+		)
+
+		// Maintain a state snapshot that gets pushed to all WebSocket clients
+		// on every update. Each push is a full snapshot, not a delta.
+		state := &chat.WSEvent{
+			SessionID: s.ID,
+			AgentID:   agentID,
+			Status:    chat.WSStatusStreaming,
+		}
+
+		a.OnTextDelta = func(text string) {
+			state.Text += text
+			state.Status = chat.WSStatusStreaming
+			pushToSession(context.Background(), s.ID, *state)
+		}
+
+		a.OnToolCall = func(id, toolName, args string) {
+			state.ToolCalls = append(state.ToolCalls, chat.WSToolCall{
+				ID:        id,
+				Name:      toolName,
+				Arguments: args,
+				Status:    chat.WSToolStatusRunning,
+			})
+			state.Status = chat.WSStatusToolCalling
+			pushToSession(context.Background(), s.ID, *state)
+		}
+
+		a.OnToolResult = func(id, toolName, result string) {
+			for i := range state.ToolCalls {
+				if state.ToolCalls[i].ID == id {
+					state.ToolCalls[i].Status = chat.WSToolStatusCompleted
+					state.ToolCalls[i].Result = result
+					break
+				}
+			}
+			state.Status = chat.WSStatusStreaming
+			pushToSession(context.Background(), s.ID, *state)
+		}
+
+		return a, nil
 	}
 
 	svc = chat.NewService(pool, createFn)
@@ -153,8 +192,21 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 
 	reply, err := svc.Reply(ctx, sessionID, body.AgentID, body.Text)
 	if err != nil {
+		pushToSession(ctx, sessionID, chat.WSEvent{
+			SessionID: sessionID,
+			AgentID:   body.AgentID,
+			Status:    chat.WSStatusError,
+			Error:     err.Error(),
+		})
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+
+	pushToSession(ctx, sessionID, chat.WSEvent{
+		SessionID: sessionID,
+		AgentID:   body.AgentID,
+		Status:    chat.WSStatusDone,
+		Text:      reply,
+	})
 	return jsonResponse(http.StatusOK, map[string]string{"reply": reply})
 }
 

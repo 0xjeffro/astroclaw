@@ -30,7 +30,6 @@ CREATE INDEX "idx_app_chat_messages_session_seq" ON "public"."app_chat_messages"
 CREATE TABLE "public"."app_chat_session_agents" (
   "session_id" uuid NOT NULL,
   "agent_id" uuid NOT NULL,
-  "role" text NOT NULL DEFAULT 'primary',
   "joined_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("session_id", "agent_id")
 );
