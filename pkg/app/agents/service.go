@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"iclaw/pkg/app/agents/db"
+	"astroclaw/pkg/app/agents/db"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

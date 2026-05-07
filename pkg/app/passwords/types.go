@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"iclaw/pkg/app/passwords/db"
+	"astroclaw/pkg/app/passwords/db"
 )
 
 var (

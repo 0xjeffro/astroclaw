@@ -23,7 +23,7 @@ const (
 
 // Unified stop reasons. Each provider maps its native values to these constants:
 //
-//	iclaw constant          | Anthropic          | OpenAI
+//	AstroClaw constant      | Anthropic          | OpenAI
 //	------------------------+--------------------+-------------------
 //	StopReasonEndTurn       | end_turn           | stop
 //	StopReasonToolUse       | tool_use           | tool_calls

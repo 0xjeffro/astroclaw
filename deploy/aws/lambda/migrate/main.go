@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"iclaw/pkg/app/agents"
-	"iclaw/pkg/app/passwords"
-	"iclaw/pkg/app/settings"
-	"iclaw/pkg/app/system"
+	"astroclaw/pkg/app/agents"
+	"astroclaw/pkg/app/passwords"
+	"astroclaw/pkg/app/settings"
+	"astroclaw/pkg/app/system"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
@@ -94,9 +94,9 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 
 	// This Lambda only runs SQL against an existing database; it doesn't
 	// create any infrastructure for CloudFormation to track.
-	// Return a fixed PhysicalResourceID (`iclaw-database-migrations`) so CloudFormation never sees a change
+	// Return a fixed PhysicalResourceID (`astroclaw-database-migrations`) so CloudFormation never sees a change
 	// and never triggers a replacement or delete cycle.
-	return &Result{PhysicalResourceID: "iclaw-database-migrations"}, nil
+	return &Result{PhysicalResourceID: "astroclaw-database-migrations"}, nil
 }
 
 // runMigrations reads SQL files from the migrations/ directory (bundled with
@@ -293,7 +293,7 @@ func seedDefaultAgent(ctx context.Context, pool *pgxpool.Pool) error {
 		return nil
 	}
 
-	defaultSoul := "You are iClaw, a personal AI assistant. " +
+	defaultSoul := "You are AstroClaw, a personal AI assistant. " +
 		"Be genuinely helpful, not performatively helpful. Skip filler words like 'Great question!' and just help. " +
 		"Have opinions. Be direct. Admit uncertainty when appropriate. " +
 		"Be resourceful before asking. Try to figure it out, then ask if stuck. " +

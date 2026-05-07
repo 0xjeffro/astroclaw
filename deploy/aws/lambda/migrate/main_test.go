@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 
 	// Start a PostgreSQL container with two databases.
 	pg, err := postgres.Run(ctx, "postgres:16",
-		postgres.WithDatabase("iclaw_direct"),
+		postgres.WithDatabase("astroclaw_direct"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
 		postgres.BasicWaitStrategies(),
@@ -50,14 +50,14 @@ func TestMain(m *testing.M) {
 	}
 
 	// Create the second database and connect to it.
-	if _, err := directPool.Exec(ctx, "CREATE DATABASE iclaw_migrated"); err != nil {
+	if _, err := directPool.Exec(ctx, "CREATE DATABASE astroclaw_migrated"); err != nil {
 		panic("create second database: " + err.Error())
 	}
 	migratedConfig, err := pgxpool.ParseConfig(connDirect)
 	if err != nil {
 		panic("parse connection config: " + err.Error())
 	}
-	migratedConfig.ConnConfig.Database = "iclaw_migrated"
+	migratedConfig.ConnConfig.Database = "astroclaw_migrated"
 	migratedPool, err = pgxpool.NewWithConfig(ctx, migratedConfig)
 	if err != nil {
 		panic("connect to migrated database: " + err.Error())

@@ -53,7 +53,7 @@ export class InfraStack extends cdk.Stack {
     // CloudFormation DSQL Doc: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dsql-cluster.html
     const cluster = new dsql.CfnCluster(this, 'DsqlCluster', {
       deletionProtectionEnabled: false,
-      tags: [{ key: 'Project', value: 'iclaw' }],
+      tags: [{ key: 'Project', value: 'astroclaw' }],
       // multiRegionProperties: not needed now, just single-region deployment
       // kmsEncryptionKey: using AWS-managed encryption (default)
       // policyDocument: no cross-account access needed
@@ -330,7 +330,7 @@ export class InfraStack extends cdk.Stack {
     // The Lambda's handler() function does the actual path/method routing.
     // https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_apigatewayv2.HttpApi.html
     const api = new apigwv2.HttpApi(this, 'HttpApi', {
-      apiName: 'iclaw-api',
+      apiName: 'astroclaw-api',
     });
 
     const lambdaIntegration = new integrations.HttpLambdaIntegration(

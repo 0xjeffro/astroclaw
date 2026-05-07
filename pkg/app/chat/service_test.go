@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"iclaw/pkg/agent"
-	"iclaw/pkg/provider"
+	"astroclaw/pkg/agent"
+	"astroclaw/pkg/provider"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 
 	// Start a PostgreSQL container with production migrations applied.
 	pg, err := postgres.Run(ctx, "postgres:16",
-		postgres.WithDatabase("iclaw_test"),
+		postgres.WithDatabase("astroclaw_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
 		postgres.WithInitScripts(migrationFiles...),

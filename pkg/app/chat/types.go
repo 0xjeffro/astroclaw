@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"iclaw/pkg/app/chat/db"
-	"iclaw/pkg/provider"
+	"astroclaw/pkg/app/chat/db"
+	"astroclaw/pkg/provider"
 )
 
 var (

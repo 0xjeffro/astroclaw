@@ -1,12 +1,12 @@
 package main
 
 import (
+	"astroclaw/pkg/app/chat"
+	"astroclaw/pkg/app/passwords"
+	"astroclaw/pkg/app/settings"
+	"astroclaw/pkg/app/system"
 	"context"
 	"encoding/json"
-	"iclaw/pkg/app/chat"
-	"iclaw/pkg/app/passwords"
-	"iclaw/pkg/app/settings"
-	"iclaw/pkg/app/system"
 	"log"
 	"net/http"
 	"os"

@@ -92,7 +92,7 @@ exports[`snapshot 1`] = `
         "false",
       ],
       "Default": "false",
-      "Description": "Generate a new API key for authentication. Only set to true on first deploy or to rotate.",
+      "Description": "ALWAYS pass explicitly. true = generate new key (overwrites existing). false = keep existing key.",
       "Type": "String",
     },
   },
@@ -198,7 +198,7 @@ exports[`snapshot 1`] = `
         "Tags": [
           {
             "Key": "Project",
-            "Value": "iclaw",
+            "Value": "astroclaw",
           },
         ],
       },
@@ -290,7 +290,7 @@ exports[`snapshot 1`] = `
     },
     "HttpApiF5A9A8A7": {
       "Properties": {
-        "Name": "iclaw-api",
+        "Name": "astroclaw-api",
         "ProtocolType": "HTTP",
       },
       "Type": "AWS::ApiGatewayV2::Api",

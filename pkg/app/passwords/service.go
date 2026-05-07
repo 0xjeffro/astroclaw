@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"iclaw/pkg/app/passwords/db"
+	"astroclaw/pkg/app/passwords/db"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

@@ -3,7 +3,7 @@ package notes
 import (
 	"time"
 
-	"iclaw/pkg/app/notes/db"
+	"astroclaw/pkg/app/notes/db"
 )
 
 type Memory struct {

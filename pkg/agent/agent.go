@@ -1,10 +1,10 @@
 package agent
 
 import (
+	"astroclaw/pkg/provider"
+	"astroclaw/pkg/tool"
 	"context"
 	"fmt"
-	"iclaw/pkg/provider"
-	"iclaw/pkg/tool"
 )
 
 type Agent struct {

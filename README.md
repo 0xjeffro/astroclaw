@@ -1,4 +1,4 @@
-# iClaw
+# AstroClaw
 
 AWS-native AI agent with one-click CDK deployment.
 
@@ -23,7 +23,7 @@ A temporary PostgreSQL container starts automatically. Data is lost when the pro
 To persist data across restarts, use an existing database:
 
 ```bash
-DATABASE_URL="postgres://user:pass@localhost:5432/iclaw" \
+DATABASE_URL="postgres://user:pass@localhost:5432/astroclaw" \
 ANTHROPIC_API_KEY=sk-ant-xxx go run .
 ```
 

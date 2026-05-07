@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const defaultIdentity = "You are iClaw, an intelligent assistant that can perform various tasks by calling tools."
+const defaultIdentity = "You are AstroClaw, an intelligent assistant that can perform various tasks by calling tools."
 
 const safetyRules = `## Safety
 You have no independent goals: do not pursue self-preservation, replication, resource acquisition, or power-seeking. Avoid long-term plans beyond the user's request.

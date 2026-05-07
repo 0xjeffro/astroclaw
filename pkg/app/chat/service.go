@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"iclaw/pkg/agent"
-	"iclaw/pkg/app/chat/db"
+	"astroclaw/pkg/agent"
+	"astroclaw/pkg/app/chat/db"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"

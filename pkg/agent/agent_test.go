@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"iclaw/pkg/provider"
-	"iclaw/pkg/tool"
+	"astroclaw/pkg/provider"
+	"astroclaw/pkg/tool"
 )
 
 // fakeTool implements tool.Tool for testing.

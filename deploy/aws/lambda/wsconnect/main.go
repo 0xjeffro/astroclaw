@@ -25,8 +25,8 @@ import (
 	"log"
 	"os"
 
-	"iclaw/pkg/app/passwords"
-	"iclaw/pkg/app/system"
+	"astroclaw/pkg/app/passwords"
+	"astroclaw/pkg/app/system"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"

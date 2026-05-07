@@ -4,13 +4,13 @@
 package main
 
 import (
+	"astroclaw/pkg/app/chat"
+	"astroclaw/pkg/app/settings"
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"iclaw/pkg/app/chat"
-	"iclaw/pkg/app/settings"
 	"io"
 	"log"
 	"net/http"
@@ -208,7 +208,7 @@ func main() {
 		log.Fatal("WS_URL must be set")
 	}
 	backend := newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
-	fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
+	fmt.Printf("AstroClaw (remote: %s) - type /exit to quit\n", apiURL)
 
 	// Fetch owner user ID and default agent ID.
 	ownerID, err := backend.GetOwnerID(ctx)

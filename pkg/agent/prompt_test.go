@@ -27,7 +27,7 @@ func TestBuildSystemPrompt_SoulOverridesIdentity(t *testing.T) {
 
 // Verifies that USER profile is injected under a "User Profile" heading.
 func TestBuildSystemPrompt_UserProfile(t *testing.T) {
-	cfg := PromptConfig{User: "Name: Jeffro. iClaw developer."}
+	cfg := PromptConfig{User: "Name: Jeffro. AstroClaw developer."}
 	prompt := BuildSystemPrompt(cfg, DefaultCharLimits())
 	if !strings.Contains(prompt, "## User Profile") {
 		t.Error("prompt should contain User Profile heading")

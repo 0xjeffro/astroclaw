@@ -161,8 +161,8 @@ func extractSystem(msgs []Message) (string, []Message) {
 	return system, chatMsgs
 }
 
-// toSDKMessages converts iclaw Messages to Anthropic SDK MessageParam slice.
-// Key differences from iclaw's format:
+// toSDKMessages converts AstroClaw Messages to Anthropic SDK MessageParam slice.
+// Key differences from AstroClaw's format:
 //   - Content is an array of typed blocks, not a plain string
 //   - Tool calls are ToolUseBlock inside assistant message content
 //   - Tool results must be inside a user message; consecutive tool results
@@ -204,7 +204,7 @@ func toSDKMessages(msgs []Message) []anthropic.MessageParam {
 	return out
 }
 
-// toSDKTools converts iclaw Tools to Anthropic SDK ToolUnionParam slice.
+// toSDKTools converts AstroClaw Tools to Anthropic SDK ToolUnionParam slice.
 func toSDKTools(tools []Tool) []anthropic.ToolUnionParam {
 	var out []anthropic.ToolUnionParam
 	for _, t := range tools {

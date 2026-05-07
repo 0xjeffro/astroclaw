@@ -76,7 +76,7 @@ test('Lambda timeouts are configured correctly', () => {
 test('API Gateway HTTP API exists', () => {
   const template = createTemplate();
   template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
-    Name: 'iclaw-api',
+    Name: 'astroclaw-api',
     ProtocolType: 'HTTP',
   });
 });
