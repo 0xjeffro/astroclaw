@@ -1,3 +1,6 @@
+// Minimal CLI for testing the deployed backend. This is NOT the final client.
+// It validates the core flow: HTTP session CRUD, Function URL reply, and
+// WebSocket real-time push.
 package main
 
 import (
@@ -13,6 +16,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // remoteBackend talks to the deployed APIs via HTTP.
@@ -197,6 +203,10 @@ func main() {
 	if replyURL == "" {
 		log.Fatal("REPLY_URL must be set")
 	}
+	wsURL := os.Getenv("WS_URL")
+	if wsURL == "" {
+		log.Fatal("WS_URL must be set")
+	}
 	backend := newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
 	fmt.Printf("iClaw (remote: %s) - type /exit to quit\n", apiURL)
 
@@ -209,6 +219,72 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}
+
+	wsConn, _, err := websocket.DefaultDialer.Dial(
+		wsURL+"?user_id="+ownerID+"&api_key="+os.Getenv("API_KEY"),
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("connect to WebSocket: %v", err)
+	}
+	defer func() { _ = wsConn.Close() }()
+
+	// Send WebSocket ping every 5 minutes to prevent API Gateway's 10-minute idle timeout.
+	// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-execution-service-websocket-limits-table.html
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := wsConn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("ws ping error: %v", err)
+				return
+			}
+		}
+	}()
+
+	wsDone := make(chan struct{})
+	go func() {
+		printedTools := map[string]bool{}
+		var lastTextLen int
+		for {
+			_, msg, err := wsConn.ReadMessage()
+			if err != nil {
+				log.Printf("ws read error: %v", err)
+				return
+			}
+			var event chat.WSEvent
+			err = json.Unmarshal(msg, &event)
+			if err != nil {
+				return
+			}
+
+			switch event.Status {
+			case chat.WSStatusStreaming:
+				if len(event.Text) > lastTextLen {
+					fmt.Print(event.Text[lastTextLen:])
+					lastTextLen = len(event.Text)
+				}
+			case chat.WSStatusToolCalling:
+				for _, tc := range event.ToolCalls {
+					if tc.Status == chat.WSToolStatusRunning && !printedTools[tc.ID] {
+						fmt.Printf("\n[calling %s(%s)]\n", tc.Name, tc.Arguments)
+						printedTools[tc.ID] = true
+					}
+				}
+			case chat.WSStatusDone:
+				fmt.Println()
+				lastTextLen = 0
+				printedTools = map[string]bool{}
+				wsDone <- struct{}{}
+			case chat.WSStatusError:
+				_, err := fmt.Fprintf(os.Stderr, "\nerror: %s\n", event.Error)
+				if err != nil {
+					return
+				}
+				wsDone <- struct{}{}
+			}
+		}
+	}()
 
 	// Create a default session on startup with the owner and default agent.
 	defaultSession, err := backend.NewSession(ctx, ownerID, []string{defaultAgentID}, "default")
@@ -276,12 +352,13 @@ func main() {
 		case input == "":
 			continue
 		default:
-			reply, err := backend.Reply(ctx, currentSession, defaultAgentID, input)
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				continue
-			}
-			fmt.Println(reply)
+			go func() {
+				if _, err := backend.Reply(ctx, currentSession, defaultAgentID, input); err != nil {
+					log.Printf("reply error: %v", err)
+					wsDone <- struct{}{}
+				}
+			}()
+			<-wsDone
 		}
 	}
 }
