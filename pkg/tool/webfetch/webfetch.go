@@ -106,9 +106,9 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	}
 
 	// SSRF pre-flight: block obvious private hosts before making any request.
-	//if isObviousPrivateHost(parsedURL.Hostname()) {
-	//	return "error: fetching private or local network hosts is not allowed", nil
-	//}
+	if isObviousPrivateHost(parsedURL.Hostname()) {
+		return "error: fetching private or local network hosts is not allowed", nil
+	}
 
 	maxChars := defaultMaxChars
 
