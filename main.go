@@ -258,6 +258,9 @@ func main() {
 				return
 			}
 
+			// DEBUG: uncomment to trace WebSocket events
+			log.Printf("[ws] status=%s text_len=%d tool_calls=%d", event.Status, len(event.Text), len(event.ToolCalls))
+
 			switch event.Status {
 			case chat.WSStatusStreaming:
 				if len(event.Text) > lastTextLen {
@@ -272,6 +275,9 @@ func main() {
 					}
 				}
 			case chat.WSStatusDone:
+				// Don't print event.Text here. The Reply Lambda's final done
+				// event includes the full reply text, but we already printed
+				// it incrementally via streaming events. Just reset state.
 				fmt.Println()
 				lastTextLen = 0
 				printedTools = map[string]bool{}
