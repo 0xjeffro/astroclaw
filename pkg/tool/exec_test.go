@@ -74,17 +74,63 @@ func TestExecCommand_Stderr(t *testing.T) {
 	}
 }
 
-// TestExecCommand_Truncation verifies that output exceeding 64KB is
-// truncated with a [TRUNCATED] marker, preventing a single verbose command
-// from blowing up the LLM context window.
-func TestExecCommand_Truncation(t *testing.T) {
-	// Generate 80KB of 'a' — well over the 64KB limit.
-	got, err := (&ExecCommandTool{}).Execute(context.Background(), makeExecArgs("head -c 80000 /dev/zero | tr '\\0' 'a'"))
+// Verify that output exceeding 2000 lines is truncated at the line limit.
+func TestExecCommand_TruncationByLines(t *testing.T) {
+	// Generate 2500 lines, well over the 2000 line limit.
+	got, err := (&ExecCommandTool{}).Execute(context.Background(), makeExecArgs("seq 1 2500"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasSuffix(got, "[TRUNCATED]") {
-		t.Error("expected result to end with [TRUNCATED]")
+	if !strings.Contains(got, "[TRUNCATED: exceeded") {
+		t.Error("expected result to contain truncation marker")
+	}
+	if !strings.Contains(got, "lines") {
+		t.Error("expected truncation marker to mention lines")
+	}
+}
+
+// Verify that output exceeding 50KB is truncated at the byte limit,
+// and that multi-byte UTF-8 characters are not split at the boundary.
+func TestExecCommand_TruncationByBytes(t *testing.T) {
+	// Generate a single long line exceeding 50KB.
+	got, err := (&ExecCommandTool{}).Execute(context.Background(), makeExecArgs("head -c 60000 /dev/zero | tr '\\0' 'a'"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(got, "[TRUNCATED: exceeded") {
+		t.Error("expected result to contain truncation marker")
+	}
+	if !strings.Contains(got, "bytes") {
+		t.Error("expected truncation marker to mention bytes")
+	}
+}
+
+// Verify that UTF-8 multi-byte characters are not split when truncating
+// at the byte limit.
+func TestExecCommand_TruncationUTF8Safe(t *testing.T) {
+	// Generate a string of Chinese characters that exceeds 50KB.
+	// Each '中' is 3 bytes in UTF-8, so 20000 chars = 60KB.
+	got, err := (&ExecCommandTool{}).Execute(context.Background(),
+		makeExecArgs("python3 -c \"print('中' * 20000)\""))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(got, "[TRUNCATED") {
+		t.Fatalf("expected truncation, got %d bytes", len(got))
+	}
+	// Extract content before the truncation marker.
+	idx := strings.Index(got, "\n[TRUNCATED")
+	if idx == -1 {
+		t.Fatal("could not find truncation marker")
+	}
+	content := got[:idx]
+	// Go's `for range` over a string decodes UTF-8 rune by rune. When it
+	// hits an invalid byte sequence (e.g. a Chinese character split in half),
+	// it produces utf8.RuneError (\uFFFD) instead of panicking.
+	for i, r := range content {
+		if r == '\uFFFD' {
+			t.Fatalf("invalid UTF-8 at byte %d", i)
+		}
 	}
 }
 
