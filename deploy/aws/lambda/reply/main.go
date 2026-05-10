@@ -10,6 +10,8 @@ import (
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/provider"
 	"astroclaw/pkg/tool"
+	"astroclaw/pkg/tool/webfetch"
+	"astroclaw/pkg/tool/websearch"
 	"context"
 	"encoding/json"
 	"errors"
@@ -108,6 +110,10 @@ func init() {
 			AgentID:   agentID,
 			SessionID: s.ID,
 		})
+		registry.Register(&websearch.Tool{
+			Provider: websearch.NewDuckDuckGoProvider(),
+		})
+		registry.Register(webfetch.New())
 
 		a := agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
