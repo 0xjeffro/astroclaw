@@ -158,6 +158,43 @@ func TestExecute_InvalidJSON(t *testing.T) {
 	}
 }
 
+// Verify that truncateBytes respects UTF-8 character boundaries when
+// truncating at the byte limit.
+func TestTruncateBytes(t *testing.T) {
+	// 'a' is 1 byte, '中' is 3 bytes.
+	s := strings.Repeat("中", 100) // 300 bytes
+
+	got, truncated := truncateBytes(s, 200)
+	if !truncated {
+		t.Error("expected truncation")
+	}
+	if len(got) > 200 {
+		t.Errorf("result is %d bytes, should be <= 200", len(got))
+	}
+	// Should not contain any replacement characters (broken UTF-8).
+	for i, r := range got {
+		if r == '\uFFFD' {
+			t.Fatalf("invalid UTF-8 at byte %d", i)
+		}
+	}
+	// Should be a multiple of 3 (each '中' is 3 bytes).
+	if len(got)%3 != 0 {
+		t.Errorf("result length %d is not a multiple of 3", len(got))
+	}
+}
+
+// Verify that truncateBytes returns the original string when under the limit.
+func TestTruncateBytes_NoTruncation(t *testing.T) {
+	s := "hello world"
+	got, truncated := truncateBytes(s, 1000)
+	if truncated {
+		t.Error("should not truncate")
+	}
+	if got != s {
+		t.Errorf("got %q, want %q", got, s)
+	}
+}
+
 // Verify that formatFetchResult includes all metadata fields.
 func TestFormatFetchResult(t *testing.T) {
 	result := formatFetchResult("https://example.com", 200, "html_to_text", true, "some content")

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -110,8 +111,6 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 		return "error: fetching private or local network hosts is not allowed", nil
 	}
 
-	maxChars := defaultMaxChars
-
 	// First attempt with browser User-Agent.
 	resp, body, err := t.doFetch(ctx, rawURL, browserUserAgent)
 	if err != nil {
@@ -136,12 +135,7 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	// Detect content type and process accordingly.
 	text, extractor := t.processContent(resp, body)
 
-	// Truncate if needed.
-	truncated := false
-	if len(text) > maxChars {
-		text = text[:maxChars]
-		truncated = true
-	}
+	text, truncated := truncateBytes(text, defaultMaxChars)
 
 	return formatFetchResult(rawURL, resp.StatusCode, extractor, truncated, text), nil
 }
@@ -233,6 +227,19 @@ func extractText(htmlContent string) string {
 	}
 
 	return strings.Join(clean, "\n")
+}
+
+// truncateBytes truncates a string to at most maxBytes, backing up to
+// the nearest UTF-8 character boundary to avoid splitting multi-byte chars.
+func truncateBytes(s string, maxBytes int) (string, bool) {
+	if len(s) <= maxBytes {
+		return s, false
+	}
+	i := maxBytes
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return s[:i], true
 }
 
 // looksLikeHTML checks if the content starts with common HTML markers.
