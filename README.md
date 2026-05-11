@@ -57,6 +57,14 @@ CDK deployment currently defaults to Aurora DSQL. A future release will add a co
 
 ### Deploy
 
+We have an interactive script that walks you through API key setup and generates the run command automatically:
+
+```bash
+./scripts/deploy.sh
+```
+
+Alternatively, you can run CDK commands directly:
+
 ```bash
 cd deploy/aws/infra
 npm install
