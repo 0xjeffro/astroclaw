@@ -355,17 +355,18 @@ func isContextLengthError(err error) bool {
 }
 
 // fallbackSummary creates a crude summary when LLM summarization fails.
-// Takes the first 10% of each message (min 200 chars) and joins with " | ".
+// Takes the first 10% of each message (min 200 runes) and joins with " | ".
 func fallbackSummary(msgs []provider.Message) string {
 	var parts []string
 	for _, m := range msgs {
 		content := m.Content
-		limit := len(content) / 10
+		runes := []rune(content)
+		limit := len(runes) / 10
 		if limit < 200 {
 			limit = 200
 		}
-		if limit < len(content) {
-			content = content[:limit] + "..."
+		if limit < len(runes) {
+			content = string(runes[:limit]) + "..."
 		}
 		parts = append(parts, m.Role+": "+content)
 	}

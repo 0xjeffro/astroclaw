@@ -154,8 +154,9 @@ func BuildSystemPrompt(cfg PromptConfig, limits CharLimits) string {
 }
 
 func truncate(s string, maxChars int) string {
-	if maxChars <= 0 || len(s) <= maxChars {
+	runes := []rune(s)
+	if maxChars <= 0 || len(runes) <= maxChars {
 		return s
 	}
-	return s[:maxChars] + "\n[truncated]"
+	return string(runes[:maxChars]) + "\n[truncated]"
 }
