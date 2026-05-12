@@ -4,6 +4,8 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	site: 'https://0xjeffro.github.io',
+	base: '/astroclaw',
 	integrations: [
 		starlight({
 			title: 'My Docs',
