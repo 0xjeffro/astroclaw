@@ -1,0 +1,43 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Run all tests except canary (network-dependent) and CDK.
+      # Testcontainers will automatically use the pre-installed Docker daemon.
+      - name: Run tests
+        run: go test -short -count=1 $(go list ./... | grep -v infra)
+
+  cdk-test:
+    name: CDK Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 23
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install CDK dependencies
+        run: cd deploy/aws/infra && npm ci
+
+      - name: Run CDK tests
+        run: cd deploy/aws/infra && npx jest

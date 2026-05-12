@@ -1,0 +1,23 @@
+name: Canary
+
+# Runs daily to detect external changes (e.g. DuckDuckGo HTML structure).
+# These tests hit real external services and should not block PRs.
+on:
+  schedule:
+    - cron: '0 8 * * *' # daily at 08:00 UTC
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  canary:
+    name: Canary Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Run only canary tests (the ones that testing.Short() skips).
+      - name: Run canary tests
+        run: go test -count=1 -run TestCanary ./...
