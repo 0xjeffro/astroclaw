@@ -14,6 +14,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// Layout constants for the TUI.
+const (
+	// sidebarTotalWidth is the session sidebar width including border (20 content + 2 border).
+	sidebarTotalWidth = 30
+	// inputBoxHeight is the height of the bottom input area including border.
+	inputBoxHeight = 3
+)
+
 // chatMessage represents a single message displayed in the chat viewport.
 type chatMessage struct {
 	role    string // "user" or "agent"
@@ -28,6 +36,11 @@ type model struct {
 	ownerID        string
 	defaultAgentID string
 
+	// ------ Session Column State ------
+	sessions    []sessionInfo // all sessions
+	selectedIdx int           // index of the currently selected session
+
+	// ------ Chat Column State ------
 	viewport viewport.Model
 	input    textinput.Model
 	messages []chatMessage
@@ -59,6 +72,10 @@ func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID
 		ownerID:        ownerID,
 		defaultAgentID: defaultAgentID,
 		input:          ti,
+		sessions: []sessionInfo{
+			{ID: sessionID, Title: "Default"},
+		},
+		selectedIdx: 0,
 	}
 }
 
@@ -118,9 +135,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		inputHeight := 3 // input box height
-		vpWidth := msg.Width
-		vpHeight := msg.Height - inputHeight
+		vpWidth := msg.Width - sidebarTotalWidth - 4 // subtract viewport border(2) + padding(2)
+		vpHeight := msg.Height - inputBoxHeight - 2
 
 		if !m.ready {
 			m.viewport = viewport.New(vpWidth, vpHeight)
@@ -219,13 +235,108 @@ func (m model) View() string {
 	}
 
 	inputBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("#F45562")).
 		Padding(0, 1).
-		Width(m.width - 2).
+		Width(m.width - sidebarTotalWidth - 2).
 		Render(m.input.View())
 
-	return m.viewport.View() + "\n" + inputBox
+	viewportBox := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#9B9DA0")).
+		Padding(0, 1).
+		Width(m.width - sidebarTotalWidth - 2).
+		Render(m.viewport.View())
+
+	chatPanel := viewportBox + "\n" + inputBox
+	chatHeight := lipgloss.Height(chatPanel)
+
+	sidebar := renderSessions(m.sessions, m.selectedIdx, chatHeight)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, chatPanel)
+}
+
+func renderSessions(sessions []sessionInfo, selectedIdx int, height int) string {
+	contentWidth := sidebarTotalWidth - 2 // subtract border width
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
+	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F45562"))
+
+	// sectionHeader renders: "──▾ Label ──────" with label in red, lines in dim.
+	sectionHeader := func(label string) string {
+		text := accentStyle.Render("  ▼ " + label + " ")
+		textWidth := lipgloss.Width(text)
+		lineRight := contentWidth - textWidth - 3
+		if lineRight < 0 {
+			lineRight = 0
+		}
+		return text + dimStyle.Render(strings.Repeat("─", lineRight))
+	}
+
+	// Section: Pinned (empty for now, placeholder)
+	var list strings.Builder
+	list.WriteString("\n")
+	list.WriteString(sectionHeader("Pinned") + "\n")
+	list.WriteString(dimStyle.Render("    (none)") + "\n")
+
+	// Section: Groups (empty for now, placeholder)
+	list.WriteString("\n")
+	list.WriteString(sectionHeader("Groups") + "\n")
+	list.WriteString(dimStyle.Render("    (none)") + "\n")
+
+	// Section: Recent (all sessions go here for now)
+	list.WriteString("\n")
+	list.WriteString(sectionHeader("Recents") + "\n")
+	for i, s := range sessions {
+		if i == selectedIdx {
+			list.WriteString("  * " + s.Title + "\n")
+		} else {
+			list.WriteString("    " + s.Title + "\n")
+		}
+	}
+
+	contentHeight := height - 2 // subtract top label + bottom border
+
+	// Pad the middle so [+ New] is pushed to the bottom.
+	listLines := strings.Count(list.String(), "\n")
+	padding := contentHeight - listLines - 1 // -1 for the [+ New] line
+	if padding < 0 {
+		padding = 0
+	}
+
+	var b strings.Builder
+	b.WriteString(list.String())
+	b.WriteString(strings.Repeat("\n", padding))
+	newBtn := lipgloss.NewStyle().Foreground(lipgloss.Color("#F45562")).Render("  [+ New]")
+	b.WriteString(newBtn)
+	borderColor := lipgloss.Color("#9B9DA0")
+
+	// Build top border with label: "─ 💬 Sessions ─────"
+	label := " ☰ "
+	labelBold := lipgloss.NewStyle().Bold(true).Render("Sessions") + " "
+	labelDisplay := label + labelBold
+	// len() counts bytes, but we need visual width for alignment.
+	labelWidth := lipgloss.Width(labelDisplay)
+	remaining := contentWidth - labelWidth
+	left := 1
+	right := remaining - left
+	if right < 0 {
+		right = 0
+	}
+	border := lipgloss.NewStyle().Foreground(borderColor)
+	topBorder := border.Render("┌"+strings.Repeat("─", left)) +
+		labelDisplay +
+		border.Render(strings.Repeat("─", right)+"┐")
+
+	// Render content with left, right, bottom borders (top is custom above).
+	content := lipgloss.NewStyle().
+		Width(contentWidth).
+		Height(height - 2). // total height minus top label line(1) and bottom border(1)
+		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
+		BorderForeground(borderColor).
+		Render(b.String())
+
+	return topBorder + "\n" + content
 }
 
 func formatMessage(msg chatMessage) string {
