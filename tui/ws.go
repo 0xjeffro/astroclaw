@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"astroclaw/pkg/app/chat"
 
@@ -24,6 +25,21 @@ func connectWS(wsURL, userID, apiKey string) (*websocket.Conn, error) {
 		return nil, err
 	}
 	return conn, nil
+}
+
+// wsPingMsg is sent by the ping ticker to trigger the next ping.
+type wsPingMsg struct{}
+
+// pingWS sends a WebSocket ping every 5 minutes to prevent API Gateway's
+// 10-minute idle timeout. Returns a wsPingMsg to schedule the next ping.
+// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-execution-service-websocket-limits-table.html
+func pingWS(conn *websocket.Conn) tea.Cmd {
+	return tea.Tick(5*time.Minute, func(_ time.Time) tea.Msg {
+		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			log.Printf("ws ping error: %v", err)
+		}
+		return wsPingMsg{}
+	})
 }
 
 // listenWS returns a Bubble Tea command that reads WebSocket messages

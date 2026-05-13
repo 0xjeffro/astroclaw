@@ -66,6 +66,7 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
 		listenWS(m.wsConn),
+		pingWS(m.wsConn),
 	)
 }
 
@@ -155,6 +156,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updateViewport(&m)
 		// Keep listening for more WebSocket events.
 		cmds = append(cmds, listenWS(m.wsConn))
+
+	case wsPingMsg:
+		// Ping sent, schedule next one.
+		cmds = append(cmds, pingWS(m.wsConn))
 
 	case replyDoneMsg:
 		if msg.err != nil && !m.streaming {
