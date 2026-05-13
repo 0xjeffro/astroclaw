@@ -78,9 +78,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Scroll 3 lines per wheel tick for smoother scrolling.
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			m.viewport.LineUp(3)
+			m.viewport.ScrollUp(3)
 		case tea.MouseButtonWheelDown:
-			m.viewport.LineDown(3)
+			m.viewport.ScrollDown(3)
+		default:
+			// ignore other mouse events (clicks, moves, etc.)
 		}
 
 	case tea.KeyMsg:
