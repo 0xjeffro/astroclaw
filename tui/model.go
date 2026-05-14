@@ -73,7 +73,13 @@ type model struct {
 	streamingTools []chat.WSToolCall
 
 	// ------ Log Sidebar State ------
-	logs []string // log entries displayed in the right sidebar
+	logs        []string        // log entries displayed in the right sidebar
+	logSearch   textinput.Model // search input in the log sidebar
+	logFilters  map[string]bool // which log filters are active
+	logViewport viewport.Model  // scrollable log content area
+
+	// ------ Focus State ------
+	focus string // which input has focus: "chat" or "logSearch"
 
 	width  int
 	height int
@@ -90,6 +96,10 @@ func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID
 	ti.Placeholder = "Type a message..."
 	ti.Focus()
 
+	ls := textinput.New()
+	ls.Placeholder = "Search logs..."
+	ls.CharLimit = 0 // no input length limit
+
 	return model{
 		backend:        b,
 		wsConn:         ws,
@@ -101,6 +111,14 @@ func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID
 			{ID: sessionID, Title: "Default"},
 		},
 		selectedIdx: 0,
+		logSearch:   ls,
+		logFilters: map[string]bool{
+			"WS":    true,
+			"HTTP":  true,
+			"Mouse": true,
+			"Keys":  true,
+		},
+		focus: "chat",
 		collapsed: map[string]bool{
 			"agents": false,
 			"groups": false,
@@ -124,21 +142,66 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			m.viewport.ScrollUp(3)
+			rightWidth := calcRightSidebarWidth(m.width)
+			if rightWidth > 0 && msg.X >= m.width-rightWidth {
+				m.logViewport.ScrollUp(3)
+			} else {
+				m.viewport.ScrollUp(3)
+			}
 		case tea.MouseButtonWheelDown:
-			m.viewport.ScrollDown(3)
+			rightWidth := calcRightSidebarWidth(m.width)
+			if rightWidth > 0 && msg.X >= m.width-rightWidth {
+				m.logViewport.ScrollDown(3)
+			} else {
+				m.viewport.ScrollDown(3)
+			}
 		case tea.MouseButtonLeft:
 			// Toggle sidebar section collapse on click (press only, not release).
 			if msg.Action != tea.MouseActionPress {
 				break
 			}
+			rightWidth := calcRightSidebarWidth(m.width)
+			rightStart := m.width - rightWidth
+
 			if msg.X < sidebarTotalWidth {
+				// Click on left sidebar: toggle section collapse.
 				for section, y := range sectionHeaderYPositions {
 					if msg.Y == y {
 						m.collapsed[section] = !m.collapsed[section]
 						break
 					}
 				}
+			} else if rightWidth > 0 && msg.X >= rightStart && msg.Y == 1 {
+				// Click on search row.
+				if msg.X >= m.width-5 {
+					// Click [✕]: clear search input.
+					m.logSearch.Reset()
+				} else {
+					// Click search area: focus search input.
+					m.focus = "logSearch"
+					m.logSearch.Focus()
+					m.input.Blur()
+				}
+			} else if rightWidth > 0 && msg.X >= rightStart && msg.Y == 2 {
+				// Click on filter row: toggle the clicked filter.
+				// Calculate which filter was clicked based on X position.
+				relX := msg.X - rightStart - 5 // offset for border + "  ≡ "
+				if relX >= 0 {
+					pos := 0
+					for _, name := range logFilterOrder {
+						filterWidth := len(name) + 3 // icon(1) + space(1) + name + space(1)
+						if relX >= pos && relX < pos+filterWidth {
+							m.logFilters[name] = !m.logFilters[name]
+							break
+						}
+						pos += filterWidth
+					}
+				}
+			} else {
+				// Click anywhere else: focus chat input.
+				m.focus = "chat"
+				m.input.Focus()
+				m.logSearch.Blur()
 			}
 		default:
 			// ignore other mouse events
@@ -146,10 +209,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+		case tea.KeyCtrlC:
+			return m, tea.Quit
+
+		case tea.KeyEsc:
+			// If in log search, switch focus back to chat.
+			if m.focus == "logSearch" {
+				m.focus = "chat"
+				m.input.Focus()
+				m.logSearch.Blur()
+				return m, nil
+			}
 			return m, tea.Quit
 
 		case tea.KeyEnter:
+			// Only send message when chat input is focused.
+			if m.focus != "chat" {
+				return m, nil
+			}
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" {
 				return m, nil
@@ -189,6 +266,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = vpHeight
 		}
 		m.input.Width = vpWidth - 4
+
+		// Log viewport: height minus top border(1) + search(1) + filter(1) + blank(1) + bottom border(1)
+		if rightWidth > 0 {
+			logVPWidth := rightWidth - 4 // border(2) + padding(2)
+			logVPHeight := msg.Height - 5
+			m.logViewport.Width = logVPWidth
+			m.logViewport.Height = logVPHeight
+			updateLogViewport(&m)
+		}
 		updateViewport(&m)
 
 	case wsEventMsg:
@@ -232,6 +318,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Update sub-components.
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	cmds = append(cmds, cmd)
+	m.logSearch, cmd = m.logSearch.Update(msg)
 	cmds = append(cmds, cmd)
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
@@ -279,6 +367,20 @@ func updateViewport(m *model) {
 	m.viewport.GotoBottom()
 }
 
+// updateLogViewport rebuilds the log content for the log viewport.
+func updateLogViewport(m *model) {
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
+	var b strings.Builder
+	if len(m.logs) == 0 {
+		b.WriteString(dimStyle.Render("  No logs yet") + "\n")
+	} else {
+		for _, entry := range m.logs {
+			b.WriteString("  " + dimStyle.Render(entry) + "\n")
+		}
+	}
+	m.logViewport.SetContent(b.String())
+}
+
 func (m model) View() string {
 	if !m.ready {
 		return "Loading..."
@@ -310,7 +412,7 @@ func (m model) View() string {
 		return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, chatPanel)
 	}
 
-	logPanel := renderLogs(m.logs, chatHeight, rightWidth)
+	logPanel := renderLogs(m.logViewport.View(), m.logSearch.View(), m.logFilters, chatHeight, rightWidth)
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, chatPanel, logPanel)
 }
 
@@ -441,7 +543,10 @@ func formatMessage(msg chatMessage) string {
 	return style.Render(prefix) + "\n" + msg.content
 }
 
-func renderLogs(logs []string, height int, totalWidth int) string {
+// logFilterOrder defines the display order of log filters.
+var logFilterOrder = []string{"WS", "HTTP", "Mouse", "Keys"}
+
+func renderLogs(logViewportView string, searchView string, filters map[string]bool, height int, totalWidth int) string {
 	contentWidth := totalWidth - 2
 	borderColor := lipgloss.Color("#9B9DA0")
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
@@ -463,21 +568,30 @@ func renderLogs(logs []string, height int, totalWidth int) string {
 		labelDisplay +
 		border.Render(strings.Repeat("─", right)+"┐")
 
-	// Toolbar: [Search] [Clear]
-	toolbar := "  " + dimStyle.Render("[Search]") + " " + accentStyle.Render("[Clear]")
+	// Toolbar: search input + clear button, single line only.
+	searchBox := lipgloss.NewStyle().
+		Width(contentWidth - 6).
+		MaxHeight(1).
+		Render(searchView)
+	toolbar := "  " + searchBox + " " + accentStyle.Render("[✕]")
 
-	// Log entries.
-	var b strings.Builder
-	b.WriteString(toolbar + "\n\n")
-	if len(logs) == 0 {
-		b.WriteString(dimStyle.Render("  No logs yet") + "\n")
-	} else {
-		for _, entry := range logs {
-			b.WriteString("  " + dimStyle.Render(entry) + "\n")
+	// Filter row.
+	var filterParts []string
+	for _, name := range logFilterOrder {
+		icon := dimStyle.Render("○")
+		if filters[name] {
+			icon = accentStyle.Render("✓")
 		}
+		filterParts = append(filterParts, icon+" "+dimStyle.Render(name))
 	}
+	filterRow := "  ≡ " + strings.Join(filterParts, " ")
 
-	content := lipgloss.NewStyle().
+	var b strings.Builder
+	b.WriteString(toolbar + "\n")
+	b.WriteString(filterRow + "\n\n")
+	b.WriteString(logViewportView)
+
+	logContent := lipgloss.NewStyle().
 		Width(contentWidth).
 		Height(height - 2).
 		Border(lipgloss.NormalBorder()).
@@ -485,5 +599,5 @@ func renderLogs(logs []string, height int, totalWidth int) string {
 		BorderForeground(borderColor).
 		Render(b.String())
 
-	return topBorder + "\n" + content
+	return topBorder + "\n" + logContent
 }
