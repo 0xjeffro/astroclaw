@@ -58,8 +58,9 @@ type model struct {
 	defaultAgentID string
 
 	// ------ Session Column State ------
-	sessions    []sessionInfo // all sessions
-	selectedIdx int           // index of the currently selected session
+	sessions    []sessionInfo   // all sessions
+	selectedIdx int             // index of the currently selected session
+	collapsed   map[string]bool // which sidebar sections are collapsed
 
 	// ------ Chat Column State ------
 	viewport viewport.Model
@@ -100,6 +101,11 @@ func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID
 			{ID: sessionID, Title: "Default"},
 		},
 		selectedIdx: 0,
+		collapsed: map[string]bool{
+			"agents": false,
+			"groups": false,
+			"chats":  false,
+		},
 	}
 }
 
@@ -116,14 +122,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.MouseMsg:
-		// Scroll 3 lines per wheel tick for smoother scrolling.
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
 			m.viewport.ScrollUp(3)
 		case tea.MouseButtonWheelDown:
 			m.viewport.ScrollDown(3)
+		case tea.MouseButtonLeft:
+			// Toggle sidebar section collapse on click (press only, not release).
+			if msg.Action != tea.MouseActionPress {
+				break
+			}
+			if msg.X < sidebarTotalWidth {
+				for section, y := range sectionHeaderYPositions {
+					if msg.Y == y {
+						m.collapsed[section] = !m.collapsed[section]
+						break
+					}
+				}
+			}
 		default:
-			// ignore other mouse events (clicks, moves, etc.)
+			// ignore other mouse events
 		}
 
 	case tea.KeyMsg:
@@ -286,7 +304,7 @@ func (m model) View() string {
 	chatPanel := viewportBox + "\n" + inputBox
 	chatHeight := lipgloss.Height(chatPanel)
 
-	sidebar := renderSessions(m.sessions, m.selectedIdx, chatHeight)
+	sidebar := renderSessions(m.sessions, m.selectedIdx, m.collapsed, chatHeight)
 
 	if rightWidth == 0 {
 		return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, chatPanel)
@@ -296,15 +314,21 @@ func (m model) View() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, chatPanel, logPanel)
 }
 
-func renderSessions(sessions []sessionInfo, selectedIdx int, height int) string {
+// sectionHeaderYPositions tracks Y coordinates of section headers for click detection.
+var sectionHeaderYPositions = map[string]int{}
+
+func renderSessions(sessions []sessionInfo, selectedIdx int, collapsed map[string]bool, height int) string {
 	contentWidth := sidebarTotalWidth - 2 // subtract border width
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
 	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F45562"))
 
-	// sectionHeader renders: "  ⌄ Label (3) ──── [+]"
-	// Label in red, count in dim, divider line in dim, + button in red.
-	sectionHeader := func(label string, count int) string {
-		text := accentStyle.Render("  ⌄ "+label) + " " + dimStyle.Render(fmt.Sprintf("(%d)", count)) + " "
+	// sectionHeader renders: "  ⌄ Label (3) ──── [+]" or "  › Label (3) ──── [+]"
+	sectionHeader := func(label string, count int, isCollapsed bool) string {
+		icon := "⌄"
+		if isCollapsed {
+			icon = "›"
+		}
+		text := accentStyle.Render("  "+icon+" "+label) + " " + dimStyle.Render(fmt.Sprintf("(%d)", count)) + " "
 		plus := accentStyle.Render("[+]")
 		textWidth := lipgloss.Width(text)
 		plusWidth := lipgloss.Width(plus)
@@ -315,25 +339,45 @@ func renderSessions(sessions []sessionInfo, selectedIdx int, height int) string 
 		return text + dimStyle.Render(strings.Repeat("─", lineRight)) + " " + plus
 	}
 
-	// Section: Agents (empty for now, placeholder)
 	var list strings.Builder
-	list.WriteString("\n")
-	list.WriteString(sectionHeader("👨🏻‍🚀 Agents", 0) + "\n")
-	list.WriteString(dimStyle.Render("    (none)") + "\n")
+	lineNum := 1 // start after top border
 
-	// Section: Groups (empty for now, placeholder)
+	// Section: Agents
 	list.WriteString("\n")
-	list.WriteString(sectionHeader("Groups", 0) + "\n")
-	list.WriteString(dimStyle.Render("    (none)") + "\n")
+	lineNum++
+	sectionHeaderYPositions["agents"] = lineNum
+	list.WriteString(sectionHeader("👨🏻‍🚀 Agents", 0, collapsed["agents"]) + "\n")
+	lineNum++
+	if !collapsed["agents"] {
+		list.WriteString(dimStyle.Render("    (none)") + "\n")
+		lineNum++
+	}
 
-	// Section: Chats (all sessions go here for now)
+	// Section: Groups
 	list.WriteString("\n")
-	list.WriteString(sectionHeader("Chats", len(sessions)) + "\n")
-	for i, s := range sessions {
-		if i == selectedIdx {
-			list.WriteString("    * " + s.Title + "\n")
-		} else {
-			list.WriteString("      " + s.Title + "\n")
+	lineNum++
+	sectionHeaderYPositions["groups"] = lineNum
+	list.WriteString(sectionHeader("Groups", 0, collapsed["groups"]) + "\n")
+	lineNum++
+	if !collapsed["groups"] {
+		list.WriteString(dimStyle.Render("    (none)") + "\n")
+		lineNum++
+	}
+
+	// Section: Chats
+	list.WriteString("\n")
+	lineNum++
+	sectionHeaderYPositions["chats"] = lineNum
+	list.WriteString(sectionHeader("Chats", len(sessions), collapsed["chats"]) + "\n")
+	lineNum++
+	if !collapsed["chats"] {
+		for i, s := range sessions {
+			if i == selectedIdx {
+				list.WriteString("    * " + s.Title + "\n")
+			} else {
+				list.WriteString("      " + s.Title + "\n")
+			}
+			lineNum++
 		}
 	}
 
