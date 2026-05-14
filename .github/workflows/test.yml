@@ -20,7 +20,14 @@ jobs:
       # Run all tests except canary (network-dependent) and CDK.
       # Testcontainers will automatically use the pre-installed Docker daemon.
       - name: Run tests
-        run: go test -short -count=1 $(go list ./... | grep -v infra)
+        run: go test -short -count=1 -coverprofile=coverage.out $(go list ./... | grep -v infra)
+
+      - name: Upload Go coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          flags: go
 
   cdk-test:
     name: CDK Tests
@@ -40,4 +47,10 @@ jobs:
         run: cd deploy/aws/infra && npm ci
 
       - name: Run CDK tests
-        run: cd deploy/aws/infra && npx jest
+        run: cd deploy/aws/infra && npx jest --coverage
+
+      - name: Upload CDK coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: cdk
