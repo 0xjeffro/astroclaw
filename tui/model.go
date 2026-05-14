@@ -21,7 +21,7 @@ const (
 	// rightSidebarMinWidth is the minimum width to show the log sidebar.
 	rightSidebarMinWidth = 25
 	// rightSidebarMaxWidth is the maximum width the log sidebar can grow to.
-	rightSidebarMaxWidth = 50
+	rightSidebarMaxWidth = 80
 	// chatMinWidth is the minimum width for the chat area. Right sidebar
 	// collapses before chat gets narrower than this.
 	chatMinWidth = 61
@@ -301,14 +301,14 @@ func renderSessions(sessions []sessionInfo, selectedIdx int, height int) string 
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B6B6B"))
 	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F45562"))
 
-	// sectionHeader renders: "  ▼ Label ─────── +"
-	// Label in red, divider line in dim, + button in red, right-aligned.
-	sectionHeader := func(label string) string {
-		text := accentStyle.Render("  ⌄ " + label + " ")
+	// sectionHeader renders: "  ⌄ Label (3) ──── [+]"
+	// Label in red, count in dim, divider line in dim, + button in red.
+	sectionHeader := func(label string, count int) string {
+		text := accentStyle.Render("  ⌄ "+label) + " " + dimStyle.Render(fmt.Sprintf("(%d)", count)) + " "
 		plus := accentStyle.Render("[+]")
 		textWidth := lipgloss.Width(text)
 		plusWidth := lipgloss.Width(plus)
-		lineRight := contentWidth - textWidth - plusWidth - 2 // 2 for spacing
+		lineRight := contentWidth - textWidth - plusWidth - 2
 		if lineRight < 0 {
 			lineRight = 0
 		}
@@ -318,17 +318,17 @@ func renderSessions(sessions []sessionInfo, selectedIdx int, height int) string 
 	// Section: Agents (empty for now, placeholder)
 	var list strings.Builder
 	list.WriteString("\n")
-	list.WriteString(sectionHeader("👨🏿‍🚀 Agents") + "\n")
+	list.WriteString(sectionHeader("👨🏻‍🚀 Agents", 0) + "\n")
 	list.WriteString(dimStyle.Render("    (none)") + "\n")
 
 	// Section: Groups (empty for now, placeholder)
 	list.WriteString("\n")
-	list.WriteString(sectionHeader("Groups") + "\n")
+	list.WriteString(sectionHeader("Groups", 0) + "\n")
 	list.WriteString(dimStyle.Render("    (none)") + "\n")
 
 	// Section: Chats (all sessions go here for now)
 	list.WriteString("\n")
-	list.WriteString(sectionHeader("Chats") + "\n")
+	list.WriteString(sectionHeader("Chats", len(sessions)) + "\n")
 	for i, s := range sessions {
 		if i == selectedIdx {
 			list.WriteString("    * " + s.Title + "\n")
