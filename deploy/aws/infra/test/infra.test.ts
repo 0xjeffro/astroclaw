@@ -144,3 +144,30 @@ test('Reply Lambda has ManageConnections permission', () => {
     },
   });
 });
+
+// Verifies the S3 bucket for skills storage exists with public access blocked.
+test('Skills S3 bucket exists with public access blocked', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::S3::Bucket', {
+    PublicAccessBlockConfiguration: {
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    },
+  });
+});
+
+// Verifies Reply Lambda has S3 read access for loading skills.
+test('Reply Lambda has S3 read access', () => {
+  const template = createTemplate();
+  template.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Action: Match.arrayWith(['s3:GetObject*', 's3:GetBucket*', 's3:List*']),
+        }),
+      ]),
+    },
+  });
+});

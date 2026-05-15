@@ -6,6 +6,7 @@ import * as cr from 'aws-cdk-lib/custom-resources';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { execSync } from 'child_process';
 import * as crypto from 'crypto';
 import * as path from 'path';
@@ -26,14 +27,14 @@ export class InfraStack extends cdk.Stack {
 
     // API authentication key. When GenerateApiKey=true, a random key is
     // generated at synth time, passed to migrate Lambda to seed into
-    // credentials table, and printed in the stack output.
+    //  the credentials table, and printed in the stack output.
     //
-    // IMPORTANT: always pass this parameter explicitly on every deploy.
+    // IMPORTANT: always pass this parameter explicitly on every deployment.
     // CloudFormation retains the previous parameter value when omitted,
     // so if you deployed with true once and then omit the parameter,
     // it stays true and overwrites your API key with a new one.
     //
-    // First deploy:      --parameters GenerateApiKey=true
+    // First deploy: --parameters GenerateApiKey=true
     // Subsequent deploys: --parameters GenerateApiKey=false
     const generateApiKey = new cdk.CfnParameter(this, 'GenerateApiKey', {
       type: 'String',
@@ -57,6 +58,22 @@ export class InfraStack extends cdk.Stack {
       // multiRegionProperties: not needed now, just single-region deployment
       // kmsEncryptionKey: using AWS-managed encryption (default)
       // policyDocument: no cross-account access needed
+    });
+
+    // S3 bucket for skill storage (ZIP archives).
+    // Each skill is stored as skills/{author}/{name}.zip.
+    // The @local/ namespace is reserved for user-created skills that
+    // haven't been published to a registry yet (e.g. skills/@local/my-skill.zip).
+    // https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_s3.Bucket.html
+    // removalPolicy is DESTROY so cdk destroy doesn't leave orphan buckets
+    // that block redeployment. Data safety is handled at the script layer:
+    // scripts/destroy.sh should back up bucket contents before destroying.
+    // TODO: implement backup in scripts/destroy.sh
+    const skillsBucket = new s3.Bucket(this, 'SkillsBucket', {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
     });
 
     // Lambda CDK docs: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda.Function.html
@@ -230,10 +247,14 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
         WS_ENDPOINT: wsStage.callbackUrl,
+        SKILLS_BUCKET: skillsBucket.bucketName,
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
     });
+
+    // Grant Reply Lambda read access to the skills bucket.
+    skillsBucket.grantRead(replyHandler);
 
     // Allow Reply Lambda to push events to WebSocket clients via PostToConnection.
     // PostToConnection is part of the API Gateway Management API (@connections),
@@ -357,6 +378,11 @@ export class InfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WebSocketUrl', {
       value: wsStage.url,
       description: 'WebSocket endpoint for real-time events',
+    });
+
+    new cdk.CfnOutput(this, 'SkillsBucketName', {
+      value: skillsBucket.bucketName,
+      description: 'S3 bucket for skill storage',
     });
 
     new cdk.CfnOutput(this, 'GeneratedApiKey', {

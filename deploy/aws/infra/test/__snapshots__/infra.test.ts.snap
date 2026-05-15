@@ -50,6 +50,12 @@ exports[`snapshot 1`] = `
         ],
       },
     },
+    "SkillsBucketName": {
+      "Description": "S3 bucket for skill storage",
+      "Value": {
+        "Ref": "SkillsBucket512669F8",
+      },
+    },
     "WebSocketUrl": {
       "Description": "WebSocket endpoint for real-time events",
       "Value": {
@@ -191,6 +197,64 @@ exports[`snapshot 1`] = `
         ],
       },
       "Type": "AWS::IAM::Policy",
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+      "DependsOn": [
+        "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+      ],
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "cdk-hnb659fds-assets-\${AWS::AccountId}-\${AWS::Region}",
+          },
+          "S3Key": "[ASSET HASH].zip",
+        },
+        "Description": {
+          "Fn::Join": [
+            "",
+            [
+              "Lambda function for auto-deleting objects in ",
+              {
+                "Ref": "SkillsBucket512669F8",
+              },
+              " S3 bucket.",
+            ],
+          ],
+        },
+        "Handler": "index.handler",
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+            "Arn",
+          ],
+        },
+        "Runtime": "nodejs22.x",
+        "Timeout": 900,
+      },
+      "Type": "AWS::Lambda::Function",
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com",
+              },
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:\${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          },
+        ],
+      },
+      "Type": "AWS::IAM::Role",
     },
     "DsqlCluster": {
       "Properties": {
@@ -545,6 +609,9 @@ exports[`snapshot 1`] = `
                 "Endpoint",
               ],
             },
+            "SKILLS_BUCKET": {
+              "Ref": "SkillsBucket512669F8",
+            },
             "WS_ENDPOINT": {
               "Fn::Join": [
                 "",
@@ -627,6 +694,36 @@ exports[`snapshot 1`] = `
       "Properties": {
         "PolicyDocument": {
           "Statement": [
+            {
+              "Action": [
+                "s3:GetObject*",
+                "s3:GetBucket*",
+                "s3:List*",
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "SkillsBucket512669F8",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "SkillsBucket512669F8",
+                          "Arn",
+                        ],
+                      },
+                      "/*",
+                    ],
+                  ],
+                },
+              ],
+            },
             {
               "Action": "execute-api:ManageConnections",
               "Effect": "Allow",
@@ -714,6 +811,105 @@ exports[`snapshot 1`] = `
       },
       "Type": "AWS::CloudFormation::CustomResource",
       "UpdateReplacePolicy": "Delete",
+    },
+    "SkillsBucket512669F8": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256",
+              },
+            },
+          ],
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true,
+        },
+        "Tags": [
+          {
+            "Key": "aws-cdk:auto-delete-objects",
+            "Value": "true",
+          },
+        ],
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "SkillsBucketAutoDeleteObjectsCustomResource95360366": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "SkillsBucketPolicy513BFE18",
+      ],
+      "Properties": {
+        "BucketName": {
+          "Ref": "SkillsBucket512669F8",
+        },
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "Custom::S3AutoDeleteObjects",
+      "UpdateReplacePolicy": "Delete",
+    },
+    "SkillsBucketPolicy513BFE18": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "SkillsBucket512669F8",
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:PutBucketPolicy",
+                "s3:GetBucket*",
+                "s3:List*",
+                "s3:DeleteObject*",
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::GetAtt": [
+                    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+                    "Arn",
+                  ],
+                },
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "SkillsBucket512669F8",
+                    "Arn",
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "SkillsBucket512669F8",
+                          "Arn",
+                        ],
+                      },
+                      "/*",
+                    ],
+                  ],
+                },
+              ],
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::S3::BucketPolicy",
     },
     "WebSocketApi34BCF99B": {
       "Properties": {
