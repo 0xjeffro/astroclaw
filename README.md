@@ -74,6 +74,28 @@ cdk deploy --parameters AnthropicApiKey=<YOUR-KEY> --parameters GenerateApiKey=t
 
 After deployment, the API URL will be printed in the terminal output.
 
+### Run TUI
+
+```bash
+API_URL=<API_URL> \
+REPLY_URL=<REPLY_URL> \
+WS_URL=<WS_URL> \
+API_KEY=<API_KEY> \
+go run ./tui/
+```
+
+Replace the values with the outputs from `cdk deploy`. Or use `./scripts/deploy.sh` which generates the command automatically.
+
+### Run CLI (minimal, for testing)
+
+```bash
+API_URL=<API_URL> \
+REPLY_URL=<REPLY_URL> \
+WS_URL=<WS_URL> \
+API_KEY=<API_KEY> \
+go run main.go
+```
+
 ## Development
 - [Installing or updating to the latest version of the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 - [Getting started with the AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html)
