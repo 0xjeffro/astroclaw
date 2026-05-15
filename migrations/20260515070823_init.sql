@@ -91,6 +91,20 @@ CREATE TABLE "public"."app_settings_kv" (
   PRIMARY KEY ("id"),
   CONSTRAINT "app_settings_kv_name_key" UNIQUE ("name")
 );
+-- Create "app_skills" table
+CREATE TABLE "public"."app_skills" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "author" text NOT NULL DEFAULT '',
+  "name" text NOT NULL,
+  "description" text NOT NULL,
+  "when_to_use" text NOT NULL DEFAULT '',
+  "tags" text NOT NULL DEFAULT '',
+  "version" text NOT NULL DEFAULT '',
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "app_skills_author_name_key" UNIQUE ("author", "name")
+);
 -- Create "app_system_connections" table
 CREATE TABLE "public"."app_system_connections" (
   "connection_id" text NOT NULL,

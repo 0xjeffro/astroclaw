@@ -1,6 +1,7 @@
 env "local" {
   src = [
     "file://pkg/app/chat/db/schema.sql",
+    "file://pkg/app/skills/db/schema.sql",
     "file://pkg/app/passwords/db/schema.sql",
     "file://pkg/app/settings/db/schema.sql",
     "file://pkg/app/notes/db/schema.sql",
