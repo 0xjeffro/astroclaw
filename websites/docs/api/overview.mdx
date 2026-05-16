@@ -1,0 +1,51 @@
+---
+title: "AstroClaw REST API overview"
+description: "AstroClaw exposes a REST API, a Lambda Function URL, and a WebSocket—each served from separate base URLs output by CDK after deployment."
+---
+
+AstroClaw's API surface is split across three endpoints that CDK prints as stack outputs when you deploy. The REST API on **ApiUrl** handles session CRUD and settings reads. The Function URL on **ReplyUrl** handles message submission to the agent without the 30-second timeout imposed by API Gateway. The WebSocket on **WsUrl** streams agent events to connected clients in real time. All REST requests and responses use JSON.
+
+## Base URLs
+
+CDK outputs three URLs after a successful deployment:
+
+```
+API_URL:   https://<id>.execute-api.<region>.amazonaws.com
+REPLY_URL: https://<id>.lambda-url.<region>.on.aws
+WS_URL:    wss://<id>.execute-api.<region>.amazonaws.com/<stage>
+```
+
+Set these as environment variables before making requests:
+
+```bash
+export API_URL=https://<id>.execute-api.<region>.amazonaws.com
+export REPLY_URL=https://<id>.lambda-url.<region>.on.aws
+export WS_URL=wss://<id>.execute-api.<region>.amazonaws.com/<stage>
+```
+
+## Request format
+
+All REST requests must include the `Content-Type: application/json` header. Requests that require authentication also need the `x-api-key` header. See [Authentication](/api/authentication) for details.
+
+## Endpoints
+
+| Method | Path | Base URL | Description |
+|--------|------|----------|-------------|
+| `POST` | `/sessions` | API_URL | Create a session |
+| `GET` | `/sessions` | API_URL | List sessions |
+| `GET` | `/sessions/{id}` | API_URL | Get a session |
+| `DELETE` | `/sessions/{id}` | API_URL | Delete a session |
+| `POST` | `/sessions/{id}/reply` | REPLY_URL | Send a message to the agent |
+| `GET` | `/settings/{name}` | API_URL | Get a configuration setting |
+| `GET` | `/users/owner` | API_URL | Get the owner user profile |
+| WebSocket | `/` | WS_URL | Real-time streaming events |
+
+## Response format
+
+All successful responses return JSON with a `Content-Type: application/json` header. Error responses follow the same format with an `error` key:
+
+```json
+{"error": "unauthorized"}
+```
+
+HTTP status codes follow standard conventions: `200` for success, `201` for creation, `401` for authentication failures, `404` for missing resources, and `500` for server errors.

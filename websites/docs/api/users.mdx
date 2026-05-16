@@ -1,0 +1,84 @@
+---
+title: "GET /users/owner — retrieve owner profile"
+description: "Retrieve the owner user's UUID from your AstroClaw deployment. You need this ID when creating sessions, as it identifies who owns each conversation."
+---
+
+AstroClaw's deployment creates a single owner user. You must pass the owner's UUID as `user_id` when creating a session, so retrieve it before making any session requests.
+
+---
+
+## GET /users/owner
+
+Returns the owner user.
+
+**Base URL:** `API_URL`
+
+```bash
+curl -H "x-api-key: YOUR_API_KEY" \
+     https://YOUR_API_URL/users/owner
+```
+
+### Response (200 OK)
+
+```json
+{
+  "ID": "uuid",
+  "Email": "owner@example.com",
+  "Name": "Owner",
+  "Role": "owner",
+  "CreatedAt": "2024-01-01T00:00:00Z",
+  "UpdatedAt": "2024-01-01T00:00:00Z"
+}
+```
+
+<ResponseField name="ID" type="string">
+  The owner's unique identifier (UUID). Use this value as `user_id` when calling [POST /sessions](/api/sessions#post-sessions).
+</ResponseField>
+
+<ResponseField name="Email" type="string">
+  The owner's email address.
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  The owner's display name.
+</ResponseField>
+
+<ResponseField name="Role" type="string">
+  The user's role. Always `"owner"` for this endpoint.
+</ResponseField>
+
+<ResponseField name="CreatedAt" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="UpdatedAt" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+### Error (404 Not Found)
+
+```json
+{"error": "not found"}
+```
+
+---
+
+## When to use this endpoint
+
+Call this endpoint once during client initialization, before you create any sessions. Store the returned `ID` and reuse it — the owner ID does not change between requests.
+
+```bash
+# 1. Get the owner ID
+curl -H "x-api-key: YOUR_API_KEY" https://YOUR_API_URL/users/owner
+# → { "ID": "owner-uuid", "Email": "...", ... }
+
+# 2. Use the ID when creating a session
+curl -X POST https://YOUR_API_URL/sessions \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: YOUR_API_KEY" \
+     -d '{"user_id":"owner-uuid","agent_ids":["agent-uuid"],"title":"My session"}'
+```
+
+<Note>
+  The response field name is `ID` with an uppercase "I" and "D", matching Go's JSON serialization of exported struct fields. Make sure your JSON client maps to that exact casing.
+</Note>

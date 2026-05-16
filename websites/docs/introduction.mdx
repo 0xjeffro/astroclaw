@@ -1,0 +1,65 @@
+---
+title: "AstroClaw: self-hosted AI agent on AWS"
+description: "AstroClaw is an open-source AI agent you deploy to your own AWS account via CDK — persistent, streaming, and fully under your control."
+---
+
+AstroClaw is a self-hosted AI agent platform that runs entirely in your own AWS account. You deploy it with a single CDK command, connect through a terminal UI or a minimal CLI, and get a persistent, streaming AI assistant that you own end-to-end. This page explains what AstroClaw is, what it can do, and how to choose the right options for your setup.
+
+## What AstroClaw does
+
+AstroClaw runs as a serverless backend on AWS and exposes a REST and WebSocket API. When you send a message, your agent streams a response back in real time over WebSocket. Conversations are stored in a database tied to your AWS account — nothing is sent to a third-party platform.
+
+You configure each agent with a name, a personality ("soul"), and a choice of underlying AI model. Agents can use built-in tools, load skills, and maintain long-term memory across sessions.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Persistent chat sessions" icon="messages-square">
+    Every conversation is saved to your database. Pick up where you left off across clients and devices.
+  </Card>
+  <Card title="Real-time streaming" icon="zap">
+    Responses stream token-by-token over WebSocket so you see output as it's generated.
+  </Card>
+  <Card title="Configurable agents" icon="bot">
+    Give your agent a name, a personality soul, and a specific AI model. Change any of these at any time.
+  </Card>
+  <Card title="Built-in tools and skills" icon="wrench">
+    Agents can execute shell commands, search the web, read and write files, and more through a built-in tool system.
+  </Card>
+  <Card title="Long-term memory" icon="brain">
+    AstroClaw stores facts across sessions so your agent remembers context over time.
+  </Card>
+  <Card title="One-click CDK deployment" icon="cloud">
+    A single interactive script handles CDK bootstrap, stack deployment, and API key generation.
+  </Card>
+</CardGroup>
+
+## Supported AI providers
+
+AstroClaw works with both **OpenAI** and **Anthropic**. You supply your own API key at deploy time. No proxy, no markup — requests go directly from your AWS infrastructure to the provider.
+
+## Client options
+
+| Client | Best for |
+|--------|----------|
+| **Terminal UI (TUI)** | Day-to-day use — a full interactive interface in your terminal |
+| **CLI** | Scripting and quick one-off queries |
+
+Both clients connect to the same deployed backend using the API URL, WebSocket URL, and API key printed after deployment.
+
+## Database options
+
+| Option | Description |
+|--------|-------------|
+| **Aurora DSQL** | Serverless, pay-per-request — no idle cost, scales to zero |
+| **Aurora PostgreSQL** | Provisioned — predictable performance for heavier workloads |
+
+You choose the database option during the interactive deploy script. Both store data in your own AWS account.
+
+## Next step
+
+Ready to deploy? Follow the quickstart to have AstroClaw running in your AWS account in minutes.
+
+<Card title="Deploy AstroClaw to AWS" icon="rocket" href="/quickstart">
+  Clone the repo, run the deploy script, and start chatting.
+</Card>

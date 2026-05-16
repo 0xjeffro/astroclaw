@@ -1,0 +1,193 @@
+---
+title: "WebSocket API for real-time streaming"
+description: "Connect to AstroClaw's WebSocket to receive streaming agent events. Each event is a full state snapshot — status, cumulative text, and active tool calls."
+---
+
+AstroClaw pushes agent state to connected WebSocket clients in real time. Every time the agent generates text, calls a tool, or finishes responding, it sends a full state snapshot to all clients connected to that session. You receive the complete current state on each event — no delta accumulation is needed, which means a reconnecting client recovers immediately by processing the next event.
+
+## Connecting
+
+Open a WebSocket connection to `WS_URL` with your `user_id` and `api_key` as query parameters:
+
+```
+wss://YOUR_WS_URL?user_id=<owner-id>&api_key=YOUR_API_KEY
+```
+
+Get your `user_id` from [GET /users/owner](/api/users) before connecting.
+
+**Example in Go:**
+
+```go
+wsConn, _, err := websocket.DefaultDialer.Dial(
+    wsURL+"?user_id="+ownerID+"&api_key="+apiKey,
+    nil,
+)
+if err != nil {
+    log.Fatalf("connect to WebSocket: %v", err)
+}
+defer wsConn.Close()
+```
+
+## Keep-alive
+
+AWS API Gateway WebSocket disconnects idle connections after 10 minutes. Send a WebSocket ping every 5 minutes to keep the connection open:
+
+```go
+go func() {
+    ticker := time.NewTicker(5 * time.Minute)
+    defer ticker.Stop()
+    for range ticker.C {
+        if err := wsConn.WriteMessage(websocket.PingMessage, nil); err != nil {
+            log.Printf("ws ping error: %v", err)
+            return
+        }
+    }
+}()
+```
+
+## Event format
+
+Each message is a JSON object representing a full snapshot of the agent's current reply state.
+
+```json
+{
+  "session_id": "uuid",
+  "agent_id": "uuid",
+  "status": "streaming",
+  "text": "Hello, I can help with that.",
+  "tool_calls": [],
+  "error": ""
+}
+```
+
+### WSEvent fields
+
+<ResponseField name="session_id" type="string">
+  The session this event belongs to.
+</ResponseField>
+
+<ResponseField name="agent_id" type="string">
+  The agent generating the reply.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current state of the agent. One of `streaming`, `tool_calling`, `done`, or `error`.
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  The full reply text generated so far. This field is **cumulative** — it grows with each `streaming` event and contains the entire response, not just the new portion.
+</ResponseField>
+
+<ResponseField name="tool_calls" type="object[]">
+  Array of active tool calls. Present when `status` is `tool_calling`. See [Tool call object](#tool-call-object) below.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message. Only present when `status` is `error`. Omitted from the JSON when empty.
+</ResponseField>
+
+## Status values
+
+| Status | Meaning |
+|--------|---------|
+| `streaming` | The agent is generating text. `text` contains the full response accumulated so far. |
+| `tool_calling` | The agent is executing one or more tools. `tool_calls` contains their current state. |
+| `done` | The agent has finished responding. Reset your local text state. |
+| `error` | An error occurred. The `error` field contains the message. |
+
+## Tool call object
+
+Each entry in `tool_calls` describes a single tool invocation:
+
+```json
+{
+  "id": "string",
+  "name": "string",
+  "arguments": "string",
+  "status": "running",
+  "result": ""
+}
+```
+
+<ResponseField name="id" type="string">
+  Unique identifier for this tool call.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the tool being called (e.g., `"websearch"`, `"read_file"`).
+</ResponseField>
+
+<ResponseField name="arguments" type="string">
+  JSON-encoded arguments passed to the tool.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  One of `running`, `completed`, or `failed`.
+</ResponseField>
+
+<ResponseField name="result" type="string">
+  The tool's output. Present only when `status` is `completed` or `failed`. Omitted from the JSON when empty.
+</ResponseField>
+
+## Handling streaming text
+
+<Note>
+  The `text` field in streaming events is cumulative — it contains the full response generated so far, not just the new characters. Track the previous length and slice only the new portion to avoid printing duplicate text.
+</Note>
+
+**Example in Go (from the CLI client):**
+
+```go
+var lastTextLen int
+
+switch event.Status {
+case "streaming":
+    // text is cumulative — print only the new delta
+    if len(event.Text) > lastTextLen {
+        fmt.Print(event.Text[lastTextLen:])
+        lastTextLen = len(event.Text)
+    }
+case "done":
+    // agent finished — reset for the next message
+    fmt.Println()
+    lastTextLen = 0
+case "error":
+    fmt.Fprintf(os.Stderr, "\nerror: %s\n", event.Error)
+}
+```
+
+## Complete JavaScript example
+
+```javascript
+const ws = new WebSocket(`${WS_URL}?user_id=${userId}&api_key=${apiKey}`);
+
+let lastTextLen = 0;
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  switch (data.status) {
+    case 'streaming':
+      // text is cumulative; slice from where we left off
+      process.stdout.write(data.text.slice(lastTextLen));
+      lastTextLen = data.text.length;
+      break;
+    case 'tool_calling':
+      // data.tool_calls contains active tool calls with id, name, arguments, status
+      break;
+    case 'done':
+      console.log('\n[done]');
+      lastTextLen = 0;
+      break;
+    case 'error':
+      console.error('Error:', data.error);
+      break;
+  }
+};
+
+// Keep-alive: browser WebSocket API doesn't expose ping frames directly.
+// Send an empty message every 5 minutes as an alternative keep-alive.
+setInterval(() => {
+  if (ws.readyState === WebSocket.OPEN) ws.send('');
+}, 5 * 60 * 1000);
+```

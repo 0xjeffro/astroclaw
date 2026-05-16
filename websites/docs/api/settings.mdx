@@ -1,0 +1,76 @@
+---
+title: "GET /settings/{name} — retrieve configuration"
+description: "GET /settings/{name} — read a named configuration value. Built-in settings include default_agent_id and user_profile, which clients need at startup."
+---
+
+Settings are key-value pairs stored in the database that configure your deployment's runtime behavior. You read a setting by name using a single GET endpoint. AstroClaw ships with two built-in settings that clients commonly need: `default_agent_id` and `user_profile`.
+
+## Built-in settings
+
+| Name | Description |
+|------|-------------|
+| `default_agent_id` | UUID of the default agent used in new sessions |
+| `user_profile` | Text profile of the owner, injected into the agent's context on every reply |
+
+---
+
+## GET /settings/{name}
+
+Returns the value of a named setting.
+
+**Base URL:** `API_URL`
+
+<ParamField path="name" type="string" required>
+  The setting name. Built-in values: `default_agent_id`, `user_profile`.
+</ParamField>
+
+### Response (200 OK)
+
+```json
+{
+  "ID": "uuid",
+  "Name": "default_agent_id",
+  "Value": "agent-uuid-here",
+  "UpdatedAt": "2024-01-01T00:00:00Z"
+}
+```
+
+<ResponseField name="ID" type="string">
+  Unique setting identifier (UUID).
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  The setting name, matching the path parameter you requested.
+</ResponseField>
+
+<ResponseField name="Value" type="string">
+  The current value of the setting.
+</ResponseField>
+
+<ResponseField name="UpdatedAt" type="string">
+  ISO 8601 timestamp of when the setting was last updated.
+</ResponseField>
+
+### Error (404 Not Found)
+
+```json
+{"error": "setting not found"}
+```
+
+---
+
+## Examples
+
+**Get the default agent ID:**
+
+```bash
+curl -H "x-api-key: YOUR_API_KEY" \
+     https://YOUR_API_URL/settings/default_agent_id
+```
+
+**Get the user profile:**
+
+```bash
+curl -H "x-api-key: YOUR_API_KEY" \
+     https://YOUR_API_URL/settings/user_profile
+```

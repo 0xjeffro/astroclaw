@@ -1,0 +1,46 @@
+---
+title: "What is an agent in AstroClaw?"
+description: "Agents are AI personas with a custom name, soul (system prompt), and model. Each agent can call built-in tools and accumulate its own persistent memory."
+---
+
+An agent is a configured AI persona that your AstroClaw deployment runs on your behalf. Each agent has a name, a soul that shapes its personality, and a model that determines which underlying LLM powers it. You can create multiple agents with different characteristics — a terse coding assistant, a verbose research companion, a domain expert with specialized knowledge — and route conversations to whichever agent fits the task.
+
+## Agent fields
+
+Every agent has the following properties:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Unique agent identifier (UUID) |
+| `Name` | string | Human-readable agent name |
+| `Soul` | string | System prompt that defines the agent's personality and behavior |
+| `Model` | string | AI model used by the agent (e.g. `"claude-sonnet-4-20250514"`, `"gpt-4o"`) |
+| `CreatedAt` | timestamp | When the agent was created |
+| `UpdatedAt` | timestamp | When the agent was last updated |
+| `DeletedAt` | timestamp or null | `null` if active; set when the agent is deleted |
+
+## Key properties
+
+**Soul** — The soul is the system prompt injected at the start of every conversation. It defines the agent's personality, behavioral constraints, areas of expertise, and tone. A well-crafted soul is the primary lever you have for tuning how an agent behaves.
+
+**Model** — The model field specifies which LLM the agent uses (for example, `claude-3-5-sonnet-20241022` or `gpt-4o`). Different agents in the same deployment can use different models.
+
+**Stateless execution** — Agents are stateless by design. A fresh agent instance is created for each `Reply` call, loaded from the session's stored context, and discarded when the reply is complete. State is held in the session, not in the agent itself.
+
+## Default agent
+
+Each deployment has a default agent identified by the `default_agent_id` setting. When you start a conversation without specifying an agent, the default agent handles it.
+
+## Agents and sessions
+
+An agent can participate in one or more sessions. When you create a session you specify which agent (or agents) will participate. Each session maintains its own conversation history independently of other sessions using the same agent.
+
+Multiple agents participating in a single session is a planned feature for future multi-agent conversations.
+
+## Tool use
+
+Agents can call built-in tools — shell execution, memory, file operations, web search, and more — as part of responding to a message. The agent loop runs up to 10 steps, calling tools and incorporating their results before returning a final text response. See [Built-in tools](/concepts/tools) for the full list.
+
+<Tip>
+Write your agent's soul as a role description, not a list of rules. Describe who the agent is ("You are a senior backend engineer who..."), the context it operates in, and any constraints that are always true. Avoid restating what the tools already do — the agent already knows its capabilities. Keep the soul focused on personality, domain, and tone; use [skills](/concepts/skills) for large bodies of reference material.
+</Tip>

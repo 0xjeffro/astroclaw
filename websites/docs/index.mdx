@@ -1,0 +1,134 @@
+---
+title: AstroClaw Documentation
+description: Everything you need to deploy, configure, and use your AstroClaw AI agent on AWS.
+mode: frame
+---
+
+<div data-product-guide-index className="flex w-full flex-col gap-8 max-w-5xl mx-auto px-4 md:px-8 lg:px-12 py-10 lg:gap-14 lg:py-16">
+  <div className="flex max-w-[540px] flex-col gap-2 self-center text-center">
+    <h1 className="text-[30px] font-medium leading-9 tracking-tight text-gray-900 dark:text-gray-50">
+      AstroClaw
+    </h1>
+    <p className="text-balance text-base leading-relaxed tracking-tight text-gray-600 dark:text-gray-400">
+      AWS-native AI agent with one-click CDK deployment. Deploy your own persistent, streaming AI assistant to AWS in minutes.
+    </p>
+  </div>
+
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <Card
+      title={<span className="product-guide-feature-card-title">Get started</span>}
+      icon="rocket"
+      href="/quickstart"
+      className="product-guide-feature-card"
+      size={64}
+    >
+      <span className="product-guide-feature-card-description">Deploy AstroClaw to AWS and start chatting in minutes.</span>
+    </Card>
+
+    <a
+      href="/api/overview"
+      className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+    >
+      <Icon icon="code-xml" color="rgb(var(--primary))" size={18} className="shrink-0" />
+      <div className="flex flex-col gap-1">
+        <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">API Reference</span>
+        <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+          Explore the REST and WebSocket API for sessions, agents, and real-time events.
+        </span>
+      </div>
+    </a>
+    <a
+      href="/concepts/agents"
+      className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+    >
+      <Icon icon="bot" color="rgb(var(--primary))" size={18} className="shrink-0" />
+      <div className="flex flex-col gap-1">
+        <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Core Concepts</span>
+        <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+          Understand agents, sessions, tools, skills, and persistent memory.
+        </span>
+      </div>
+    </a>
+  </div>
+
+  <hr className="border-0 border-t border-border" />
+
+  <div className="flex flex-col gap-4">
+    <h2 className="font-serif text-xl font-medium leading-normal text-gray-900 dark:text-gray-50">Common tasks</h2>
+
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <a
+        href="/deployment/aws-cdk"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="cloud" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Deploy to AWS</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            One-click CDK deployment with automatic API key generation.
+          </span>
+        </div>
+      </a>
+      <a
+        href="/api/authentication"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="key-round" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Authenticate requests</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Generate and rotate API keys for secure access to your agent.
+          </span>
+        </div>
+      </a>
+      <a
+        href="/clients/tui"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="terminal" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Run the TUI client</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Launch the interactive terminal UI to chat with your deployed agent.
+          </span>
+        </div>
+      </a>
+      <a
+        href="/concepts/tools"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="wrench" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Explore agent tools</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Learn about built-in tools: shell exec, web search, file I/O, and more.
+          </span>
+        </div>
+      </a>
+      <a
+        href="/deployment/configuration"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="settings" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Configure your agent</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Set AI provider keys, default agent, user profile, and other settings.
+          </span>
+        </div>
+      </a>
+      <a
+        href="/local-development"
+        className="rounded-2xl flex flex-col gap-4 border bg-gray-50 p-4 outline-none shadow-sm shadow-gray-950/5 transition hover:border-primary hover:shadow-md dark:bg-gray-950 dark:shadow-black/20 dark:hover:border-primary"
+      >
+        <Icon icon="laptop" color="rgb(var(--primary))" size={18} className="shrink-0" />
+        <div className="flex flex-col gap-1">
+          <span className="font-serif text-base font-medium text-gray-900 dark:text-gray-50">Run locally</span>
+          <span className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            Test AstroClaw on your machine with a local PostgreSQL container.
+          </span>
+        </div>
+      </a>
+    </div>
+  </div>
+</div>

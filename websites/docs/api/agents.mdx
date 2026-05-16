@@ -1,0 +1,87 @@
+---
+title: "Agent profiles and configuration"
+description: "Reference for the Agent object returned by AstroClaw's API, plus how to retrieve the default agent ID needed for session creation and message replies."
+---
+
+An agent is an AI persona with a name, a system prompt (called a "soul"), and an assigned model. When you send a message to a session, you specify which agent should reply. Agents are created during deployment seeding — the current API does not expose endpoints to create or list agents directly.
+
+## The Agent object
+
+<ResponseField name="ID" type="string">
+  Unique agent identifier (UUID).
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  Human-readable agent name.
+</ResponseField>
+
+<ResponseField name="Soul" type="string">
+  The agent's system prompt and personality definition. This is injected into the agent's context on every reply.
+</ResponseField>
+
+<ResponseField name="Model" type="string">
+  The AI model the agent uses (e.g., `"claude-sonnet-4-20250514"`, `"gpt-4o"`).
+</ResponseField>
+
+<ResponseField name="CreatedAt" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="UpdatedAt" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+<ResponseField name="DeletedAt" type="string or null">
+  `null` if the agent is active. An ISO 8601 timestamp if the agent has been deleted.
+</ResponseField>
+
+## Getting the default agent ID
+
+The default agent ID is stored as the `default_agent_id` setting. Retrieve it before creating a session:
+
+```bash
+curl -H "x-api-key: YOUR_API_KEY" \
+     https://YOUR_API_URL/settings/default_agent_id
+```
+
+Response:
+
+```json
+{
+  "ID": "uuid",
+  "Name": "default_agent_id",
+  "Value": "<agent-uuid>",
+  "UpdatedAt": "2024-01-01T00:00:00Z"
+}
+```
+
+The `Value` field contains the agent UUID. Pass this as an element of `agent_ids` when calling [POST /sessions](/api/sessions#post-sessions), and as `agent_id` when calling [POST /sessions/{id}/reply](/api/sessions#post-sessions-id-reply).
+
+## Typical startup flow
+
+When building a client, retrieve the owner user ID and the default agent ID before creating any sessions:
+
+<Steps>
+  <Step title="Get the owner user ID">
+    ```bash
+    curl -H "x-api-key: YOUR_API_KEY" https://YOUR_API_URL/users/owner
+    # → { "ID": "owner-uuid", ... }
+    ```
+  </Step>
+  <Step title="Get the default agent ID">
+    ```bash
+    curl -H "x-api-key: YOUR_API_KEY" https://YOUR_API_URL/settings/default_agent_id
+    # → { "Value": "agent-uuid", ... }
+    ```
+  </Step>
+  <Step title="Create a session with both IDs">
+    ```bash
+    curl -X POST https://YOUR_API_URL/sessions \
+         -H "Content-Type: application/json" \
+         -H "x-api-key: YOUR_API_KEY" \
+         -d '{"user_id":"owner-uuid","agent_ids":["agent-uuid"],"title":"My session"}'
+    ```
+  </Step>
+</Steps>
+
+See [GET /users/owner](/api/users) for the full response shape and [GET /settings/{name}](/api/settings) for the settings endpoint.

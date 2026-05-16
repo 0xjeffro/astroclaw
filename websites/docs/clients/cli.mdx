@@ -1,0 +1,67 @@
+---
+title: "AstroClaw CLI: minimal command-line client"
+description: "A lightweight inline terminal chatbot for validating your AstroClaw deployment — useful for smoke tests and scripting, with WebSocket streaming support."
+---
+
+AstroClaw includes a minimal CLI for testing and validating your deployed backend. Unlike the TUI, it runs inline in your terminal without a full-screen interface — making it convenient for quick smoke tests, scripting, or confirming that all four connection URLs are working correctly after a deployment.
+
+<Note>
+The CLI is explicitly marked as a testing tool in the source: "Minimal CLI for testing the deployed backend. This is NOT the final client." For regular day-to-day use, prefer the [TUI client](/clients/tui).
+</Note>
+
+## Requirements
+
+Same as the TUI: Go 1.22+, a deployed AstroClaw instance, and the four environment variables from your CDK deployment outputs: `API_URL`, `REPLY_URL`, `WS_URL`, `API_KEY`.
+
+## Launch the CLI
+
+```bash
+API_URL=<API_URL> \
+REPLY_URL=<REPLY_URL> \
+WS_URL=<WS_URL> \
+API_KEY=<API_KEY> \
+go run main.go
+```
+
+On startup the CLI fetches the owner user ID and default agent ID, opens a WebSocket connection, creates a default session titled `"default"`, and prints a prompt.
+
+## Available commands
+
+Type any of these commands at the `>` prompt:
+
+| Command | Description |
+|---|---|
+| `/exit` or `/quit` | Exit the CLI |
+| `/sessions` | List all sessions; the active session is marked with `*` |
+| `/new [title]` | Create a new session and switch to it; `title` is optional and defaults to `"untitled"` |
+| `/switch <id>` | Switch to an existing session by its ID |
+| `/delete <id>` | Soft-delete a session by ID; you cannot delete the currently active session |
+| Any other input | Send the text as a message to the current session |
+
+## Example session
+
+```
+AstroClaw (remote: https://xxxx.execute-api.us-east-1.amazonaws.com) - type /exit to quit
+Session: default (abc-123-def)
+> Hello! What can you do?
+[AI response streams here...]
+> /new work
+Created and switched to session: work (xyz-456-ghi)
+> /sessions
+  default (abc-123-def)
+* work (xyz-456-ghi)
+> /exit
+```
+
+## Differences from the TUI
+
+| | CLI | TUI |
+|---|---|---|
+| Interface | Inline terminal (no full-screen) | Full-screen with alternative screen mode |
+| Session management | Commands at the prompt | Visual sidebar with collapsible sections |
+| Log visibility | Not shown | Dedicated log panel with search and filters |
+| Mouse support | No | Yes |
+| Tool call display | Printed inline (`[calling name(args)]`) | Shown with status icons in the chat viewport |
+| Primary use | Smoke testing and scripting | Day-to-day interaction |
+
+Both clients use the same WebSocket connection for real-time streaming and send pings every 5 minutes to prevent the API Gateway idle timeout from closing the connection.

@@ -1,0 +1,238 @@
+---
+title: "REST API endpoints for sessions"
+description: "Create, list, retrieve, and delete chat sessions via the REST API, and send messages to the agent using the Lambda Function URL endpoint."
+---
+
+Sessions represent individual conversations between a user and one or more agents. Each session stores its own context window, conversation summary, and message history. You create a session before sending any messages, and you can manage multiple sessions concurrently.
+
+---
+
+## POST /sessions
+
+Creates a new chat session.
+
+**Base URL:** `API_URL`
+
+### Request body
+
+<ParamField body="user_id" type="string" required>
+  The ID of the user who owns this session. Retrieve it from [GET /users/owner](/api/users).
+</ParamField>
+
+<ParamField body="agent_ids" type="string[]" required>
+  Array of agent IDs to participate in the session. Retrieve the default agent ID from [GET /settings/default\_agent\_id](/api/settings).
+</ParamField>
+
+<ParamField body="title" type="string" required>
+  A human-readable name for the session.
+</ParamField>
+
+```bash
+curl -X POST https://YOUR_API_URL/sessions \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: YOUR_API_KEY" \
+     -d '{
+       "user_id": "owner-uuid",
+       "agent_ids": ["agent-uuid"],
+       "title": "My session"
+     }'
+```
+
+### Response (201 Created)
+
+```json
+{
+  "ID": "uuid",
+  "UserID": "uuid",
+  "Title": "My session",
+  "Model": "claude-sonnet-4-20250514",
+  "SystemPrompt": "string",
+  "ContextWindow": 128000,
+  "ContextMessages": [],
+  "ContextSummary": "",
+  "CreatedAt": "2024-01-01T00:00:00Z",
+  "UpdatedAt": "2024-01-01T00:00:00Z",
+  "DeletedAt": null
+}
+```
+
+<ResponseField name="ID" type="string">
+  Unique session identifier (UUID).
+</ResponseField>
+
+<ResponseField name="UserID" type="string">
+  ID of the user who owns the session.
+</ResponseField>
+
+<ResponseField name="Title" type="string">
+  Human-readable session name.
+</ResponseField>
+
+<ResponseField name="Model" type="string">
+  The AI model associated with the session (e.g., `"claude-sonnet-4-20250514"`).
+</ResponseField>
+
+<ResponseField name="SystemPrompt" type="string">
+  The system prompt injected into the agent's context.
+</ResponseField>
+
+<ResponseField name="ContextWindow" type="number">
+  Maximum token context window for the session.
+</ResponseField>
+
+<ResponseField name="ContextMessages" type="object[]">
+  The agent's compressed working context. Empty for a new session.
+</ResponseField>
+
+<ResponseField name="ContextSummary" type="string">
+  A summary of the conversation. Empty for a new session.
+</ResponseField>
+
+<ResponseField name="CreatedAt" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="UpdatedAt" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+<ResponseField name="DeletedAt" type="string or null">
+  `null` if the session is active. An ISO 8601 timestamp if soft-deleted.
+</ResponseField>
+
+---
+
+## GET /sessions
+
+Returns all sessions.
+
+**Base URL:** `API_URL`
+
+```bash
+curl https://YOUR_API_URL/sessions \
+     -H "x-api-key: YOUR_API_KEY"
+```
+
+### Response (200 OK)
+
+An array of Session objects. See the [POST /sessions](#post-sessions) response for the Session object shape.
+
+```json
+[
+  {
+    "ID": "uuid",
+    "UserID": "uuid",
+    "Title": "My session",
+    "Model": "claude-sonnet-4-20250514",
+    "SystemPrompt": "string",
+    "ContextWindow": 128000,
+    "ContextMessages": [],
+    "ContextSummary": "",
+    "CreatedAt": "2024-01-01T00:00:00Z",
+    "UpdatedAt": "2024-01-01T00:00:00Z",
+    "DeletedAt": null
+  }
+]
+```
+
+---
+
+## GET /sessions/{id}
+
+Returns a single session by ID.
+
+**Base URL:** `API_URL`
+
+<ParamField path="id" type="string" required>
+  The session UUID.
+</ParamField>
+
+```bash
+curl https://YOUR_API_URL/sessions/SESSION_ID \
+     -H "x-api-key: YOUR_API_KEY"
+```
+
+### Response (200 OK)
+
+A single Session object. See [POST /sessions](#post-sessions) for the full shape.
+
+### Error (404 Not Found)
+
+```json
+{"error": "not found"}
+```
+
+---
+
+## DELETE /sessions/{id}
+
+Soft-deletes a session. The session data is retained in the database — only the `DeletedAt` timestamp is set.
+
+**Base URL:** `API_URL`
+
+<ParamField path="id" type="string" required>
+  The session UUID to delete.
+</ParamField>
+
+```bash
+curl -X DELETE https://YOUR_API_URL/sessions/SESSION_ID \
+     -H "x-api-key: YOUR_API_KEY"
+```
+
+### Response (200 OK)
+
+```json
+{"status": "deleted"}
+```
+
+---
+
+## POST /sessions/{id}/reply
+
+Sends a message to the agent and returns the complete reply.
+
+<Warning>
+  This endpoint uses **REPLY_URL**, not API_URL. It runs on an AWS Lambda Function URL to avoid the 30-second timeout enforced by API Gateway. Use `REPLY_URL` as your base URL for this request.
+</Warning>
+
+**Base URL:** `REPLY_URL`
+
+<ParamField path="id" type="string" required>
+  The session UUID.
+</ParamField>
+
+### Request body
+
+<ParamField body="text" type="string" required>
+  The user's message text.
+</ParamField>
+
+<ParamField body="agent_id" type="string" required>
+  The ID of the agent that should generate the reply.
+</ParamField>
+
+```bash
+curl -X POST https://YOUR_REPLY_URL/sessions/SESSION_ID/reply \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: YOUR_API_KEY" \
+     -d '{
+       "text": "What is the weather like today?",
+       "agent_id": "agent-uuid"
+     }'
+```
+
+### Response (200 OK)
+
+```json
+{
+  "reply": "string"
+}
+```
+
+<ResponseField name="reply" type="string">
+  The agent's complete response text.
+</ResponseField>
+
+<Note>
+  The agent's reply is also streamed in real time via WebSocket events while it is being generated. The REST response contains the complete reply only after the agent finishes. See [WebSocket API](/api/websocket) for details on handling streaming events.
+</Note>

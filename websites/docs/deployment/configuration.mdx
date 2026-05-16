@@ -1,0 +1,88 @@
+---
+title: "Configure AstroClaw after deployment"
+description: "Set CDK deploy parameters, manage your API key, configure per-instance settings, and wire up environment variables for the TUI and CLI clients."
+---
+
+After deploying AstroClaw to AWS, you configure your instance through a combination of CDK parameters (passed at deploy time), settings stored in the database, and environment variables supplied to the TUI or CLI when you run them.
+
+## CDK deploy parameters
+
+Pass these with `--parameters` flags when running `cdk deploy`. The interactive deploy script (`./scripts/deploy.sh`) handles both interactively.
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `AnthropicApiKey` | `sk-ant-xxx` | Your Anthropic API key. Stored securely and injected into the reply Lambda at runtime. |
+| `GenerateApiKey` | `true` \| `false` | Controls API key generation. Always pass this explicitly on every deploy — CloudFormation retains the previous value when omitted. |
+
+<Warning>
+  Always pass `GenerateApiKey` explicitly on every deployment. If you omit it, CloudFormation retains the last value. If it was previously `true`, your API key will be overwritten with a new one.
+</Warning>
+
+## API key management
+
+On your first deploy, set `GenerateApiKey=true` to create a new API key. On subsequent deploys, set it to `false` to preserve your existing key.
+
+**First deploy:**
+
+```bash
+cd deploy/aws/infra
+cdk deploy --parameters AnthropicApiKey=<YOUR-KEY> --parameters GenerateApiKey=true
+```
+
+**Subsequent deploys (keep existing key):**
+
+```bash
+cd deploy/aws/infra
+cdk deploy --parameters GenerateApiKey=false
+```
+
+### Rotating your API key
+
+To replace your current API key with a freshly generated one, redeploy with `GenerateApiKey=true`:
+
+```bash
+cd deploy/aws/infra
+cdk deploy --parameters GenerateApiKey=true
+```
+
+The new key appears in the `GeneratedApiKey` CDK output. All clients using the old key will receive `401 Unauthorized` until you update their `API_KEY` environment variable.
+
+<Tip>
+  Running `./scripts/deploy.sh` and answering "yes" to "Do you want to rotate the API key?" handles key rotation for you and prints the updated run command automatically.
+</Tip>
+
+## Settings
+
+AstroClaw stores per-instance settings in the database. You can read them via the API at `GET /settings/{name}`.
+
+| Setting name | Description |
+|--------------|-------------|
+| `default_agent_id` | The ID of the agent used by default when creating new sessions. |
+| `user_profile` | Information about you, injected into the agent's context on each request. |
+
+## Environment variables for clients
+
+The TUI and CLI read their connection details from environment variables. Set these to the values printed in the CDK outputs after deploying.
+
+| Variable | CDK output | Description |
+|----------|------------|-------------|
+| `API_URL` | `ApiUrl` | API Gateway URL for session CRUD |
+| `REPLY_URL` | `ReplyUrl` | Function URL for AI replies |
+| `WS_URL` | `WebSocketUrl` | WebSocket URL for real-time events |
+| `API_KEY` | `GeneratedApiKey` | API key sent in the `x-api-key` header |
+
+### Running the TUI
+
+```bash
+API_URL=https://xxxx.execute-api.us-east-1.amazonaws.com \
+REPLY_URL=https://xxxx.lambda-url.us-east-1.on.aws \
+WS_URL=wss://xxxx.execute-api.us-east-1.amazonaws.com/prod \
+API_KEY=your-api-key \
+go run ./tui/
+```
+
+Replace each placeholder with the actual value from your CDK outputs.
+
+<Tip>
+  `./scripts/deploy.sh` generates this exact run command at the end of every deployment and optionally runs it for you immediately — no copy-pasting required.
+</Tip>

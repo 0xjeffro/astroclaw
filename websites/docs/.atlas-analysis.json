@@ -1,0 +1,96 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "AstroClaw",
+  "projectDescription": "Cloud-native personal AI agent platform with one-click CDK deployment, featuring persistent chat sessions, configurable agents, and real-time streaming.",
+  "theme": "aspen",
+  "primaryColor": "#6366F1",
+  "lightColor": "#818CF8",
+  "darkColor": "#4338CA",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "local-development"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/agents",
+              "concepts/sessions",
+              "concepts/tools",
+              "concepts/skills",
+              "concepts/memory"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/aws-cdk",
+              "deployment/configuration",
+              "deployment/database"
+            ]
+          },
+          {
+            "group": "Clients",
+            "pages": [
+              "clients/tui",
+              "clients/cli"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/sessions",
+              "api/agents",
+              "api/settings",
+              "api/users",
+              "api/websocket"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "One-click AWS CDK deployment with full IaC",
+    "Configurable AI agents with custom personality and model selection",
+    "Persistent chat sessions with context window management and summarization",
+    "Real-time streaming via WebSocket",
+    "Built-in tool system: shell exec, file I/O, web search, memory, arithmetic",
+    "Extendable skills system for loading domain-specific knowledge",
+    "Supports OpenAI and Anthropic AI providers",
+    "API key authentication with optional key rotation",
+    "Serverless Aurora DSQL or Aurora PostgreSQL database backend",
+    "Terminal UI (TUI) client built with Bubbletea"
+  ],
+  "publicApiSurface": [
+    "POST /sessions — create a chat session",
+    "GET /sessions — list all sessions",
+    "GET /sessions/{id} — get a session",
+    "DELETE /sessions/{id} — soft-delete a session",
+    "POST /sessions/{id}/reply — send a message and get an AI reply",
+    "GET /settings/{name} — retrieve a key-value setting",
+    "GET /users/owner — get the owner user profile",
+    "WebSocket wss://{ws_url}?user_id={id}&api_key={key} — real-time event stream",
+    "x-api-key header — API authentication"
+  ]
+}

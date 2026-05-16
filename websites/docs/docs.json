@@ -1,0 +1,128 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "almond",
+  "name": "AstroClaw",
+  "description": "AWS-native AI agent platform with one-click CDK deployment, persistent chat sessions, and real-time streaming.",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4338CA"
+  },
+  "favicon": "/favicon.ico",
+  "icons": {
+    "library": "lucide"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs"
+  },
+  "contextual": {
+    "options": ["copy", "view", "assistant", "mcp", "add-mcp"]
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Home",
+          "icon": "house",
+          "href": "/"
+        },
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/0xjeffro/astroclaw"
+        }
+      ]
+    },
+    "directory": "card",
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "icon": "rocket",
+            "expanded": true,
+            "pages": [
+              "introduction",
+              "quickstart",
+              "local-development"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "icon": "book-open",
+            "expanded": true,
+            "pages": [
+              "concepts/agents",
+              "concepts/sessions",
+              "concepts/tools",
+              "concepts/skills",
+              "concepts/memory"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "icon": "cloud",
+            "expanded": true,
+            "pages": [
+              "deployment/aws-cdk",
+              "deployment/configuration",
+              "deployment/database"
+            ]
+          },
+          {
+            "group": "Clients",
+            "icon": "terminal",
+            "expanded": true,
+            "pages": [
+              "clients/tui",
+              "clients/cli"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "circle-help",
+            "expanded": true,
+            "pages": [
+              "api/overview",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "icon": "plug",
+            "expanded": true,
+            "pages": [
+              "api/sessions",
+              "api/agents",
+              "api/settings",
+              "api/users",
+              "api/websocket"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/0xjeffro/astroclaw"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/0xjeffro/astroclaw"
+    }
+  }
+}

@@ -1,0 +1,137 @@
+---
+title: "Built-in tools available to your agent"
+description: "AstroClaw agents use built-in tools — shell commands, file I/O, web search, memory, and more. Sensitive tools pause for your approval before they run."
+---
+
+AstroClaw agents are not limited to generating text. During a reply, an agent can call built-in tools to take actions: run a shell command, read or write files, search the web, or save a fact to persistent memory. The agent decides which tool to call and when, based on your message and its soul (system prompt).
+
+Some tools require your approval before they execute. When an agent wants to call an approval-required tool, it pauses and asks you to confirm. If you deny the request, the tool is not executed and the agent is told to ask you how to proceed.
+
+<Note>
+Tools marked as requiring approval will prompt you before executing. The TUI client surfaces this as an interactive yes/no prompt. If you deny the request, the tool is not run and no side effects occur — the agent sees a message indicating the call was rejected and will ask how you want to proceed.
+</Note>
+
+## Tool reference
+
+<AccordionGroup>
+  <Accordion title="exec_command — run a shell command">
+    Executes a shell command using `sh -c`, which means pipes, redirects, environment variables, and `&&` chains all work as expected. stdout and stderr are combined into a single result returned to the agent.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | Yes |
+    | Runs in | Workspace / EC2 environment |
+    | Timeout | 30 seconds |
+    | Output limit | 2,000 lines or 50 KB, whichever is reached first |
+
+    If the command exceeds the output limit, the result is truncated and a `[TRUNCATED]` marker is appended so the agent knows output was cut off. Non-zero exit codes are included in the result as `[exit error: ...]` rather than returning an error, so the agent can read the output and decide what to do.
+
+    **Parameter:** `command` (string) — the shell command to execute.
+  </Accordion>
+
+  <Accordion title="read_file — read a text file">
+    Reads a text file from the workspace filesystem and returns its contents. Binary files are rejected. Output is capped at 2,000 lines or 50 KB, with per-line truncation for lines exceeding 2,000 characters.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Workspace / EC2 environment |
+    | Output limit | 2,000 lines or 50 KB |
+
+    **Parameter:** `path` (string) — absolute or relative path to the file.
+  </Accordion>
+
+  <Accordion title="write_file — write a text file">
+    Writes content to a file. Parent directories are created automatically. To overwrite an existing file, `overwrite` must be explicitly set to `true`; this prevents accidental overwrites.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | Yes |
+    | Runs in | Workspace / EC2 environment |
+
+    **Parameters:**
+    - `path` (string) — absolute or relative path to the file.
+    - `content` (string) — the content to write.
+    - `overwrite` (boolean, optional) — must be `true` to replace an existing file. Defaults to `false`.
+  </Accordion>
+
+  <Accordion title="edit_file — edit a text file">
+    Edits a file by replacing an exact occurrence of `old_text` with `new_text`. The `old_text` must appear exactly once in the file; if it appears zero or more than one time, the tool returns an error. Use an empty `new_text` to delete text.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | Yes |
+    | Runs in | Workspace / EC2 environment |
+
+    **Parameters:**
+    - `path` (string) — path to the file to edit.
+    - `old_text` (string) — the exact text to find (must appear exactly once).
+    - `new_text` (string) — the replacement text; use `""` to delete.
+  </Accordion>
+
+  <Accordion title="memory_save — save a persistent fact">
+    Saves a durable fact to the agent's persistent memory store. Saved memories are injected into the system prompt at the start of every future session, so the agent remembers across conversations.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Serverless (Lambda) |
+
+    The agent saves memories proactively when you correct it, share a preference, or when it discovers a relevant fact about your environment. Write content as declarative facts, not instructions.
+
+    **Parameter:** `content` (string) — the fact to remember, written as a declarative statement.
+
+    See [Persistent memory](/concepts/memory) for more detail on how memory works.
+  </Accordion>
+
+  <Accordion title="web_search — search the web">
+    Searches the web and returns titles, URLs, and snippets. Use this for current information, news, documentation, or anything that may be outdated in the model's training data.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Serverless (Lambda) |
+    | Default results | 5 (max 100) |
+
+    **Parameters:**
+    - `query` (string, required) — the search query.
+    - `count` (integer, optional) — number of results to return (default 5, max 100).
+    - `time_range` (string, optional) — filter by recency: `d` (past day), `w` (past week), `m` (past month), `y` (past year).
+  </Accordion>
+
+  <Accordion title="web_fetch — fetch a web page">
+    Fetches a URL and returns its text content. HTML pages have scripts, styles, and tags stripped; JSON responses are pretty-printed; other content types are returned as-is. Content is capped at 50,000 characters.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Serverless (Lambda) |
+    | Timeout | 60 seconds |
+    | Content limit | 50,000 characters |
+    | Allowed schemes | `http`, `https` only |
+
+    Fetching private or local network hosts is blocked. The tool automatically retries with a different User-Agent when a Cloudflare challenge is detected.
+
+    **Parameter:** `url` (string) — the URL to fetch (must be `http` or `https`).
+  </Accordion>
+
+  <Accordion title="eval_arithmetic — evaluate an arithmetic expression">
+    Evaluates an arithmetic expression using Go constant expression syntax. Supports `+`, `-`, `*`, `/`, parentheses, and decimal numbers.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Serverless (Lambda) |
+
+    **Parameter:** `expression` (string) — the arithmetic expression to evaluate, e.g. `(1+2)*3` or `10.0/3.0`.
+  </Accordion>
+
+  <Accordion title="get_current_time — get the current date and time">
+    Returns the current date and time in ISO 8601 / RFC 3339 format (e.g. `2024-06-01T12:34:56Z`). Takes no parameters.
+
+    | Property | Value |
+    |---|---|
+    | Requires approval | No |
+    | Runs in | Serverless (Lambda) |
+  </Accordion>
+</AccordionGroup>

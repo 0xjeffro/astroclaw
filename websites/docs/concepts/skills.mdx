@@ -1,0 +1,64 @@
+---
+title: "Skills: domain knowledge for your agent"
+description: "Skills are versioned knowledge packages your agent loads on demand, keeping the system prompt compact while making large reference material available."
+---
+
+Skills give your agent access to large bodies of domain knowledge without bloating the system prompt. A skill is a named, versioned package of content — coding standards, a writing style guide, a runbook, API documentation — stored as a ZIP archive in S3. Your agent sees a compact index of available skills at the start of every session and loads the full content of a skill only when it's relevant to the task at hand.
+
+## Skill fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Unique skill identifier (UUID) |
+| `Author` | string | Skill author — forms the first part of `author/name` |
+| `Name` | string | Skill name — forms the second part of `author/name` |
+| `Description` | string | Short description shown in the system prompt index |
+| `WhenToUse` | string | Guidance on when the agent should load this skill |
+| `Tags` | string[] | Optional labels for organization |
+| `Version` | string | Version string for tracking changes |
+| `CreatedAt` | timestamp | When the skill was created |
+| `UpdatedAt` | timestamp | When the skill was last updated |
+
+## Identifying a skill
+
+Skills are identified by `author/name` — for example, `jeffro/coding-assistant` or `acme/api-reference`. This full name is used when referencing a skill in conversation and maps directly to its location in S3:
+
+```
+skills/{author}/{name}.zip
+```
+
+## How skills appear in the system prompt
+
+To conserve tokens, the system prompt includes only a compact index — not the full content of each skill. The index lists every available skill with its name, description, and when-to-use hint:
+
+```text
+Available skills (use load_skill tool to load full content):
+- author/name: description | When to use: when_to_use
+```
+
+When the agent determines a skill is relevant, it calls the `load_skill` tool to fetch and expand the full ZIP content from S3 into the conversation context.
+
+## Use cases
+
+Skills are well-suited for content that is:
+
+- **Too large for the soul** — detailed coding standards, long API references, verbose playbooks.
+- **Task-specific** — material that is only relevant for certain kinds of requests, not every conversation.
+- **Versioned** — content that is updated independently of the agent configuration.
+
+Typical examples include:
+
+- Domain-specific coding conventions your agent should follow when writing code
+- A house style guide for a writing assistant
+- A step-by-step playbook for a specific operational task
+- Reference documentation for an internal API the agent frequently queries
+
+## Skill attributes
+
+When you define a skill, you provide:
+
+- **author** and **name** — the `author/name` identifier used to reference the skill
+- **description** — a short description shown in the system prompt index
+- **when_to_use** — guidance on when the agent should load this skill
+- **tags** — optional labels for organization
+- **version** — a string version for tracking changes

@@ -1,0 +1,65 @@
+---
+title: "Authenticate API requests with AstroClaw"
+description: "AstroClaw uses an API key passed in the x-api-key request header. The key is generated during CDK deployment and printed in the stack output."
+---
+
+AstroClaw authenticates requests using a static API key. You pass the key in the `x-api-key` header on every REST request and as a query parameter when opening a WebSocket connection. If no API key was configured during deployment, all requests are allowed without authentication.
+
+## Getting your API key
+
+The API key is generated during CDK deployment when you pass `GenerateApiKey=true` as a parameter. After deployment completes, CDK prints the key as `GeneratedApiKey` in the stack output.
+
+If you used the interactive deployment script, the key is shown in the "Deploy Complete" section:
+
+```bash
+./scripts/deploy.sh
+```
+
+If you deployed directly with CDK:
+
+```bash
+cd deploy/aws/infra
+cdk deploy --parameters AnthropicApiKey=YOUR_LLM_KEY --parameters GenerateApiKey=true
+```
+
+## Using the API key
+
+Pass the key in the `x-api-key` header on every request:
+
+```bash
+curl -H "x-api-key: YOUR_API_KEY" \
+     https://YOUR_API_URL/sessions
+```
+
+## WebSocket authentication
+
+When connecting to the WebSocket, pass the key as a `api_key` query parameter:
+
+```
+wss://YOUR_WS_URL?user_id=<owner-id>&api_key=YOUR_API_KEY
+```
+
+## Key rotation
+
+Redeploy with `GenerateApiKey=true` to generate a new key:
+
+```bash
+cd deploy/aws/infra
+cdk deploy --parameters GenerateApiKey=true
+```
+
+Or use the interactive script, which asks about key rotation during the deploy flow:
+
+```bash
+./scripts/deploy.sh
+```
+
+## Error response
+
+When the `x-api-key` header is missing or contains an incorrect value, the API returns:
+
+```json
+{"error": "unauthorized"}
+```
+
+HTTP status: `401 Unauthorized`

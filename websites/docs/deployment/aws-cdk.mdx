@@ -1,0 +1,127 @@
+---
+title: "Deploy AstroClaw to AWS with CDK"
+description: "Deploy AstroClaw to AWS in minutes using the AWS CDK and an interactive script that configures your API key and prints all connection URLs."
+---
+
+AstroClaw deploys to AWS using the AWS CDK (Cloud Development Kit). Running `cdk deploy` provisions every resource your instance needs — from the HTTP API to the database — in a single step. You can use the interactive deploy script (recommended) or run CDK commands directly.
+
+## What gets deployed
+
+Each deployment creates the following AWS resources:
+
+- **API Gateway (HTTP)** — handles session CRUD endpoints, backed by the `api` Lambda
+- **Lambda (api)** — processes all session CRUD requests via a catch-all `/{proxy+}` route
+- **Lambda (reply)** — runs the agent loop and LLM calls; uses a Function URL to avoid the 30-second API Gateway timeout limit
+- **API Gateway (WebSocket)** — delivers real-time streaming events to connected clients
+- **Aurora DSQL cluster** — serverless, pay-per-request database (default)
+- **S3 bucket** — stores skill ZIP archives
+
+## Prerequisites
+
+Before deploying, make sure you have the following installed and configured.
+
+<Steps>
+  <Step title="Install Go 1.22+">
+    AstroClaw's Lambda functions are compiled from Go source during `cdk deploy`. Verify your Go version:
+
+    ```bash
+    go version
+    ```
+  </Step>
+
+  <Step title="Install Docker">
+    CDK uses Docker as a fallback bundler if local Go compilation fails. Docker must be running before you deploy.
+  </Step>
+
+  <Step title="Install the AWS CLI">
+    Download and install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), then verify the installation:
+
+    ```bash
+    aws --version
+    ```
+  </Step>
+
+  <Step title="Install the CDK CLI">
+    ```bash
+    npm install -g aws-cdk
+    cdk --version
+    ```
+  </Step>
+
+  <Step title="Configure AWS credentials">
+    ```bash
+    aws configure
+    aws sts get-caller-identity
+    ```
+
+    `aws sts get-caller-identity` should return your account ID and IAM identity without errors.
+  </Step>
+
+  <Step title="Get an Anthropic or OpenAI API key">
+    You need an API key from Anthropic or OpenAI to power the AI agent. Have it ready before you run the deploy script.
+  </Step>
+</Steps>
+
+## Option A: Interactive script (recommended)
+
+The deploy script walks you through every decision and prints your connection URLs and API key when finished.
+
+```bash
+./scripts/deploy.sh
+```
+
+The script:
+
+1. Asks whether this is your first deploy — if yes, it generates a new API key automatically
+2. Asks whether you want to rotate your existing API key (on subsequent deploys)
+3. Prompts for your Anthropic API key (leave blank to keep the existing value)
+4. Shows a summary of the deploy config and asks you to confirm
+5. Runs `cdk deploy` with the correct parameters
+6. Extracts the CDK outputs and prints your API URL, Reply URL, WebSocket URL, and API key
+7. Offers to run the CLI immediately using the printed values
+
+<Tip>
+  On your first deploy the script sets `GenerateApiKey=true` automatically, so you don't need to pass any extra flags.
+</Tip>
+
+## Option B: Manual CDK commands
+
+If you prefer to run CDK directly:
+
+```bash
+cd deploy/aws/infra
+npm install
+cdk bootstrap   # one-time per account/region
+cdk deploy --parameters AnthropicApiKey=<YOUR-KEY> --parameters GenerateApiKey=true
+```
+
+<Note>
+  `cdk bootstrap` creates an S3 bucket and IAM roles that CDK needs to upload assets and deploy stacks. You only need to run it once per AWS account and region. Skip it on subsequent deploys.
+</Note>
+
+## CDK outputs
+
+After a successful deploy, CDK prints the following outputs:
+
+| Output | Description |
+|--------|-------------|
+| `ApiUrl` | API Gateway URL for session CRUD endpoints |
+| `ReplyUrl` | Function URL for the reply Lambda (AI agent loop) |
+| `WebSocketUrl` | WebSocket URL for real-time streaming events |
+| `SkillsBucketName` | S3 bucket name for skill storage |
+| `GeneratedApiKey` | Your API key — only present when `GenerateApiKey=true` |
+
+Save the `GeneratedApiKey` value immediately. It is only shown once in the stack output.
+
+## Tearing down
+
+To permanently delete all deployed AWS resources:
+
+```bash
+cd deploy/aws/infra
+cdk destroy
+```
+
+<Warning>
+  `cdk destroy` permanently deletes all AWS resources created by this stack, including the Aurora DSQL cluster and all data stored in it. This action cannot be undone.
+</Warning>

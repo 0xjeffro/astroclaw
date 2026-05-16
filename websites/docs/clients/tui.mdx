@@ -1,0 +1,89 @@
+---
+title: "AstroClaw TUI: interactive terminal interface"
+description: "Chat with your deployed AstroClaw agent in a full-screen terminal UI built with Bubbletea, with real-time streaming and session management."
+---
+
+The TUI (terminal user interface) is the primary way to interact with your deployed AstroClaw agent. It's built with the [Bubbletea](https://github.com/charmbracelet/bubbletea) framework and provides a full-screen terminal experience with real-time AI response streaming, a session sidebar, and a live log panel.
+
+## Requirements
+
+- Go 1.22+
+- A deployed AstroClaw instance (see Deploy to AWS)
+- The four environment variables from your CDK deployment outputs: `API_URL`, `REPLY_URL`, `WS_URL`, `API_KEY`
+
+## Launch the TUI
+
+```bash
+API_URL=<API_URL> \
+REPLY_URL=<REPLY_URL> \
+WS_URL=<WS_URL> \
+API_KEY=<API_KEY> \
+go run ./tui/
+```
+
+<Tip>
+The `./scripts/deploy.sh` script generates the exact run command after deployment — you can copy-paste it directly without manually assembling the environment variables.
+</Tip>
+
+## What happens on launch
+
+<Steps>
+  <Step title="Fetch owner and agent">
+    The TUI calls the API to retrieve the owner user ID (`/users/owner`) and the default agent ID (`/settings/default_agent_id`).
+  </Step>
+  <Step title="Create a default session">
+    A new session titled `"default"` is created via the sessions API, associated with the owner and the default agent.
+  </Step>
+  <Step title="Open a WebSocket connection">
+    A WebSocket connection is established to the API Gateway WebSocket URL. The TUI sends a ping every 5 minutes to keep the connection alive within API Gateway's 10-minute idle timeout.
+  </Step>
+  <Step title="Render the full-screen interface">
+    The TUI launches in alternative screen mode with mouse support, displaying the session sidebar, chat viewport, input box, and log panel.
+  </Step>
+</Steps>
+
+## Features
+
+**Real-time streaming**
+
+AI responses are delivered token by token over the WebSocket connection. The chat viewport updates incrementally as each chunk arrives, so you see the response as it is generated rather than waiting for it to complete.
+
+**Tool call visibility**
+
+When the agent invokes a tool, the TUI displays its status inline in the chat area. Icons indicate the current state:
+
+- `⟳` — running
+- `✓` — completed
+- `✗` — failed
+
+**Three-panel layout**
+
+The interface is divided into three columns that adapt to your terminal width:
+
+| Panel | Description |
+|---|---|
+| Sessions sidebar (left) | Lists your chat sessions, grouped into Agents, Groups, and Chats sections. Sections are collapsible by clicking their header. |
+| Chat (center) | Displays the conversation and a text input box. Press Enter to send a message. |
+| Logs (right) | Shows real-time event logs with a search input and toggle filters for `WS`, `HTTP`, `Mouse`, and `Keys` event types. Collapses automatically when the terminal is too narrow. |
+
+**Mouse support**
+
+You can scroll either viewport with the mouse wheel, click section headers to collapse or expand them, click the log search area to focus it, and click log filter toggles to show or hide specific event types.
+
+**Keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| `Enter` | Send message (when chat input is focused) |
+| `Ctrl+C` | Quit |
+| `Esc` | Quit (or return focus to chat if log search is active) |
+
+## Getting the connection URLs
+
+Run the interactive deploy script — it prints all four environment variables and assembles the full run command for you:
+
+```bash
+./scripts/deploy.sh
+```
+
+If you deployed with `cdk deploy` directly, the four values appear in the stack outputs printed to your terminal after deployment completes.

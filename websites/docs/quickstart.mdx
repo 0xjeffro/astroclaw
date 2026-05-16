@@ -1,0 +1,100 @@
+---
+title: "Deploy AstroClaw to AWS and start chatting"
+description: "Clone the repo, run one interactive script, and connect your terminal UI to a live AstroClaw agent running in your own AWS account."
+---
+
+This guide walks you through deploying AstroClaw to AWS for the first time and connecting to it with the terminal UI (TUI). By the end you'll have a fully functional, streaming AI agent running in your own account.
+
+## Prerequisites
+
+Before you begin, make sure you have the following installed and configured:
+
+- **Go 1.22 or later** — used to run the TUI client
+- **Docker** — required for local PostgreSQL during development
+- **AWS CLI** — verify with `aws --version`
+- **CDK CLI** — install with `npm install -g aws-cdk`
+- **AWS credentials** — configure with `aws configure`
+- **An API key** from [Anthropic](https://console.anthropic.com) or [OpenAI](https://platform.openai.com)
+
+## Deploy
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone AstroClaw and move into the project directory.
+
+    ```bash
+    git clone https://github.com/0xjeffro/astroclaw.git && cd astroclaw
+    ```
+  </Step>
+
+  <Step title="Run the interactive deploy script">
+    The deploy script guides you through entering your API key, choosing a database, and running CDK.
+
+    ```bash
+    ./scripts/deploy.sh
+    ```
+
+    <Note>
+      `./scripts/deploy.sh` is interactive. It prompts you for your AI provider API key and other options, then runs `cdk bootstrap` (only needed on first deploy to a region) followed by `cdk deploy` automatically. You do not need to run any CDK commands manually.
+    </Note>
+
+    <Tip>
+      If you prefer to run CDK directly, you can deploy manually from the infrastructure directory:
+
+      ```bash
+      cd deploy/aws/infra
+      npm install
+      cdk bootstrap
+      cdk deploy --parameters AnthropicApiKey=<YOUR-KEY> --parameters GenerateApiKey=true
+      ```
+    </Tip>
+  </Step>
+
+  <Step title="Note your CDK outputs">
+    When the deployment finishes, CDK prints the values you need to connect a client. Save all four:
+
+    | Output | Description |
+    |--------|-------------|
+    | `API_URL` | Base URL for the REST API |
+    | `REPLY_URL` | URL for submitting messages |
+    | `WS_URL` | WebSocket URL for streaming responses |
+    | `API_KEY` | Authentication key for all requests |
+  </Step>
+
+  <Step title="Launch the TUI client">
+    Set the four output values as environment variables and run the terminal UI.
+
+    ```bash
+    API_URL=<API_URL> \
+    REPLY_URL=<REPLY_URL> \
+    WS_URL=<WS_URL> \
+    API_KEY=<API_KEY> \
+    go run ./tui/
+    ```
+
+    Replace each `<...>` placeholder with the corresponding value from your CDK output.
+  </Step>
+
+  <Step title="Start chatting">
+    The TUI connects to your deployed agent and opens an interactive session. Type your first message and press Enter — responses stream back in real time.
+  </Step>
+</Steps>
+
+## What's next
+
+Now that AstroClaw is running, explore what you can configure and extend:
+
+<CardGroup cols={2}>
+  <Card title="Configure your agent" icon="settings" href="/deployment/configuration">
+    Change your agent's name, personality, and model.
+  </Card>
+  <Card title="Explore built-in tools" icon="wrench" href="/concepts/tools">
+    See what tools your agent can use out of the box.
+  </Card>
+  <Card title="Understand sessions" icon="messages-square" href="/concepts/sessions">
+    Learn how persistent chat sessions work.
+  </Card>
+  <Card title="Run locally for development" icon="laptop" href="/local-development">
+    Test changes on your machine before redeploying.
+  </Card>
+</CardGroup>

@@ -1,0 +1,60 @@
+---
+title: "Run AstroClaw locally for development"
+description: "Start AstroClaw on your machine with a single Go command — a temporary PostgreSQL container starts automatically so you can test without deploying to AWS."
+---
+
+AstroClaw includes a local development mode that lets you run the server on your machine without an AWS account. When you start the process, it automatically launches a temporary PostgreSQL container via Docker. This page explains how to run locally, which AI providers you can use, and how to persist data across restarts.
+
+## Prerequisites
+
+- **Go 1.22 or later**
+- **Docker** — used to start the local PostgreSQL container automatically
+
+## Start the local server
+
+Pass your AI provider API key as an environment variable and run the project from the repository root.
+
+<CodeGroup>
+
+```bash Anthropic
+ANTHROPIC_API_KEY=sk-ant-xxx go run .
+```
+
+```bash OpenAI
+OPENAI_API_KEY=sk-xxx go run .
+```
+
+</CodeGroup>
+
+AstroClaw detects which key you've set and configures the corresponding provider automatically. The local PostgreSQL container starts in the background — you don't need to start it yourself.
+
+<Warning>
+  Data stored in the auto-started PostgreSQL container is **ephemeral**. When you stop the `go run .` process, the container stops and all session data is lost. Set `DATABASE_URL` (see below) if you need data to persist across restarts.
+</Warning>
+
+## Persist data with an existing database
+
+To keep your data between runs, point AstroClaw at an existing PostgreSQL instance using `DATABASE_URL`. The auto-started container is skipped when this variable is set.
+
+```bash
+DATABASE_URL="postgres://user:pass@localhost:5432/astroclaw" \
+ANTHROPIC_API_KEY=sk-ant-xxx go run .
+```
+
+You can use any PostgreSQL 14+ instance — a local container you manage yourself, a remote database, or an existing Aurora PostgreSQL cluster.
+
+## Using the local CLI
+
+When running locally, AstroClaw exposes the same REST API as the AWS deployment. You can interact with it using the minimal CLI client or by making direct HTTP requests.
+
+<Note>
+  The local CLI is intentionally minimal. For the full interactive experience — real-time streaming, session management, and a rich terminal interface — deploy AstroClaw to AWS and use the [TUI client](/clients/tui).
+</Note>
+
+## What's next
+
+Once you're ready to move beyond local testing, deploy your changes to AWS:
+
+<Card title="Deploy to AWS" icon="cloud" href="/quickstart">
+  Run the interactive deploy script to push AstroClaw to your AWS account.
+</Card>

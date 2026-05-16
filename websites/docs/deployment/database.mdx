@@ -1,0 +1,54 @@
+---
+title: "Database options: Aurora DSQL vs PostgreSQL"
+description: "Compare Aurora DSQL and Aurora PostgreSQL for AstroClaw deployments — covering pricing, scaling, extension support, and how to choose between them."
+---
+
+AstroClaw stores session data, messages, settings, and credentials in a relational database. For AWS deployments, it supports two backends: Aurora DSQL and Aurora PostgreSQL. For local development, it uses a standard PostgreSQL instance that starts automatically via Docker.
+
+## Aurora DSQL (default)
+
+The CDK stack deploys Aurora DSQL by default. DSQL is a true serverless database — it charges per request and scales to zero when idle, meaning you pay nothing when AstroClaw is not in use.
+
+Aurora DSQL is the best choice for personal use, low-traffic deployments, and setups where cost is a priority.
+
+## Aurora PostgreSQL
+
+Aurora PostgreSQL gives you the full PostgreSQL feature set: JSONB columns, foreign keys, and extensions including `pgvector` for vector search. This comes at a higher base cost because Aurora PostgreSQL instances run continuously.
+
+Choose Aurora PostgreSQL if you need advanced query capabilities or plan to add vector search to your skills or agents.
+
+## Comparison
+
+| Feature | Aurora DSQL | Aurora PostgreSQL |
+|---------|-------------|-------------------|
+| Pricing | Pay per request | Always-on |
+| Scale to zero | Yes | No |
+| PostgreSQL extensions | Limited | Full |
+| pgvector support | No | Yes |
+| Best for | Most workloads | Advanced queries |
+
+<Note>
+  Switching database backends requires a full redeploy and a manual data migration. Plan your backend choice before your first production deployment.
+</Note>
+
+## Choosing a backend
+
+For most personal AstroClaw deployments, Aurora DSQL is the right choice. Its pay-per-request model means the database costs nothing when you're not actively using it.
+
+If you need vector search (for example, to build a skill that retrieves semantically similar content), choose Aurora PostgreSQL for its `pgvector` support.
+
+## Roadmap
+
+The current CDK stack defaults to Aurora DSQL. A future release will add a configuration parameter to let you choose between DSQL and Aurora PostgreSQL at deploy time without modifying the stack code.
+
+## Local development
+
+When you run AstroClaw locally with `go run .`, a temporary PostgreSQL container starts automatically. No manual database setup is required. Data is lost when the process exits.
+
+To persist data across local restarts, point AstroClaw at an existing PostgreSQL database:
+
+```bash
+DATABASE_URL="postgres://user:pass@localhost:5432/astroclaw" \
+ANTHROPIC_API_KEY=sk-ant-xxx \
+go run .
+```

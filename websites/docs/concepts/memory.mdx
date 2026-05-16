@@ -1,0 +1,60 @@
+---
+title: "Persistent memory across conversations"
+description: "AstroClaw agents save facts to a durable store that persists across sessions, so your agent remembers your preferences without you repeating yourself."
+---
+
+By default, an LLM has no memory of previous conversations. AstroClaw changes this with a persistent memory store. When your agent learns something worth remembering — a preference you express, a correction you make, a fact about your environment — it saves that fact using the `memory_save` tool. The next time you open a conversation with that agent, all saved memories are injected into the system prompt, so the agent picks up where it left off.
+
+Internally, memories are stored as a collection of notes, each scoped to a specific agent.
+
+## Memory fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Unique memory identifier (UUID) |
+| `AgentID` | string | The agent this memory belongs to |
+| `Content` | string | The saved fact, as a declarative statement |
+| `SessionID` | string | The session in which this memory was created |
+| `CreatedAt` | timestamp | When this memory was saved |
+
+## Agent-scoped memory
+
+Memory is scoped per agent. Each agent has its own memory store, so a coding assistant and a writing assistant accumulate separate sets of facts. You will not see memories from one agent bleed into another.
+
+## How memory is created
+
+The agent calls the `memory_save` tool autonomously. It is designed to save proactively in three situations:
+
+1. **You correct the agent** — the agent notes what it got wrong.
+2. **You express a preference** — the agent records how you like things done.
+3. **The agent discovers something about your environment** — for example, your timezone, your preferred tools, or your project structure.
+
+You do not need to explicitly ask the agent to remember something; well-configured agents save relevant facts without being prompted.
+
+## How memory is recalled
+
+At the start of each session, all memories for the active agent are injected into the system prompt alongside the soul and any applicable [skills](/concepts/skills). The agent treats these memories as established facts about you and your environment.
+
+## Memory vs. context
+
+These two mechanisms serve different purposes and work at different time horizons:
+
+| | Context | Memory |
+|---|---|---|
+| Scope | Within a single session | Across all sessions |
+| Content | The conversation history (messages, tool calls) | Explicit durable facts saved by the agent |
+| Management | Automatic — old turns are summarized when the context window fills | Manual — saved by the agent using `memory_save` |
+| Storage | The session's active context window and conversation summary | A separate memory store scoped per agent |
+
+Context handles the working history of the current conversation. Memory handles what the agent should always know about you, regardless of which session you are in.
+
+<Tip>
+Good memories are short, declarative statements of enduring fact:
+- **Good:** `"User prefers concise responses"` — a durable preference the agent should always apply
+- **Good:** `"User works in timezone UTC+8"` — an environmental fact that affects scheduling and time references
+- **Good:** `"User's main project uses Go 1.22 and PostgreSQL 16"` — a stable technical context
+
+Poor memories are instructions or ephemeral details:
+- **Bad:** `"Always respond concisely"` — this is an instruction, not a fact; put it in the soul instead
+- **Bad:** `"User asked about DNS records on 2024-06-01"` — a transient event with no lasting relevance
+</Tip>
