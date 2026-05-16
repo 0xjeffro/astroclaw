@@ -13,7 +13,8 @@
     "library": "lucide"
   },
   "styling": {
-    "eyebrows": "breadcrumbs"
+    "eyebrows": "section",
+    "latex": true
   },
   "contextual": {
     "options": ["copy", "view", "assistant", "mcp", "add-mcp"]
