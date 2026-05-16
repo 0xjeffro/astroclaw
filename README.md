@@ -1,7 +1,8 @@
 # AstroClaw
 
-AWS-native AI agent with one-click CDK deployment.
+AstroClaw is a cloud-native AI agent framework. Instead of relying on long-lived monolithic processes, it decomposes agents into single-responsibility serverless components, while leveraging the cloud platform’s mature ecosystem for observability, identity, secrets management, and more.
 
+Out of the box, AstroClaw agents are _secure_, _scalable_, and nearly _zero-cost_ when idle. The entire infrastructure stack is defined as code (IaC), managed declaratively, and deployed with a single command.
 ## Prerequisites
 
 - Go 1.22+
