@@ -1,4 +1,4 @@
-# AstroClaw - Cloud-Native AI Agent
+# AstroClaw: Cloud-Native AI Agent
 
 **AstroClaw** is a _cloud-native_ AI agent framework. It breaks down traditional long-lived monolithic processes into single-responsibility serverless components, while leveraging the cloud platform’s mature ecosystem for observability, identity, security, and more.
 Out of the box, AstroClaw agents are _secure_, _scalable_, and nearly _zero-cost_ when idle. 
