@@ -84,17 +84,11 @@ echo "Reply URL:     $REPLY_URL"
 echo "WebSocket URL: $WS_URL"
 echo "API Key:       $API_KEY"
 echo ""
-echo "--- Run Command ---"
+echo "--- Run TUI ---"
 echo ""
 echo "API_URL=$API_URL \\"
 echo "REPLY_URL=$REPLY_URL \\"
 echo "WS_URL=$WS_URL \\"
 echo "API_KEY=$API_KEY \\"
-echo "go run main.go"
+echo "go run ./tui/"
 echo ""
-
-# Step 6: Ask to run immediately
-if ask_yn "Run now?"; then
-  cd "$PROJECT_ROOT"
-  API_URL="$API_URL" REPLY_URL="$REPLY_URL" WS_URL="$WS_URL" API_KEY="$API_KEY" go run main.go
-fi
