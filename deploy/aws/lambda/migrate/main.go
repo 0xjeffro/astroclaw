@@ -92,6 +92,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 		return nil, err
 	}
 
+	if err := seedDefaultSkills(ctx, pool); err != nil {
+		return nil, err
+	}
+
 	// This Lambda only runs SQL against an existing database; it doesn't
 	// create any infrastructure for CloudFormation to track.
 	// Return a fixed PhysicalResourceID (`astroclaw-database-migrations`) so CloudFormation never sees a change

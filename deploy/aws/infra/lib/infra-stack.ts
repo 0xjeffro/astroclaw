@@ -285,8 +285,9 @@ export class InfraStack extends cdk.Stack {
                     `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o ${outputDir}/bootstrap ./deploy/aws/lambda/migrate`,
                     { cwd: projectRoot, stdio: 'inherit' },
                 );
-                // Bundle migration SQL files alongside the binary.
+                // Bundle migration SQL files and skills alongside the binary.
                 execSync(`cp -r ${path.join(projectRoot, 'migrations')} ${outputDir}/migrations`);
+                execSync(`cp -r ${path.join(projectRoot, 'skills')} ${outputDir}/skills`);
                 return true;
               } catch {
                 return false;
@@ -296,7 +297,7 @@ export class InfraStack extends cdk.Stack {
           image: cdk.DockerImage.fromRegistry('golang:1.26'),
           command: [
             'bash', '-c',
-            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/migrate && cp -r migrations /asset-output/migrations',
+            'cd /asset-input && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -o /asset-output/bootstrap ./deploy/aws/lambda/migrate && cp -r migrations /asset-output/migrations && cp -r skills /asset-output/skills',
           ],
         },
       }),
@@ -306,10 +307,14 @@ export class InfraStack extends cdk.Stack {
         GENERATED_API_KEY: cdk.Fn.conditionIf(
           'ShouldGenerateApiKey', generatedApiKey, '',
         ).toString(),
+        SKILLS_BUCKET: skillsBucket.bucketName,
       },
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
     });
+
+    // Migrate Lambda needs S3 write access to seed default skills on first deploy.
+    skillsBucket.grantReadWrite(migrateHandler);
 
     // IAM permissions for DSQL access.
     // https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonauroradsql.html
