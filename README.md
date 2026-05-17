@@ -199,3 +199,10 @@ To destroy all deployed AWS resources:
 cd deploy/aws/infra
 cdk destroy
 ```
+
+## Acknowledgements
+AstroClaw's design was inspired by ideas from the following projects:: [openclaw](https://github.com/openclaw/openclaw), 
+[picoclaw](https://github.com/sipeed/picoclaw), 
+[opencode](https://github.com/anomalyco/opencode), and
+[hermes-agent](https://github.com/NousResearch/hermes-agent).
+We thank their authors for open-sourcing their work.
