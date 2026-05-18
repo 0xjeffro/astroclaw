@@ -4,6 +4,13 @@
 Out of the box, AstroClaw agents are _secure_, _scalable_, and nearly _zero-cost_ when idle. 
 
 The entire infrastructure stack is defined as code (IaC) and can be deployed with a single command.
+
+-----
+
+     🚧 Still early alpha. ~8 weeks to beta. Things will break, and a lot more is coming. Feedback is welcome.
+
+-----
+
 ## Prerequisites
 
 - Go 1.22+
