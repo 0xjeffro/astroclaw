@@ -7,9 +7,11 @@ import (
 	"astroclaw/pkg/app/notes"
 	"astroclaw/pkg/app/passwords"
 	"astroclaw/pkg/app/settings"
+	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/provider"
 	"astroclaw/pkg/tool"
+	toolskills "astroclaw/pkg/tool/skills"
 	"astroclaw/pkg/tool/webfetch"
 	"astroclaw/pkg/tool/websearch"
 	"context"
@@ -26,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
@@ -86,6 +89,11 @@ func init() {
 	agentsSvc := agents.NewService(pool)
 	settingsSvc := settings.NewService(pool)
 	notesSvc := notes.NewService(pool)
+	skillsSvc := appskills.NewService(pool)
+
+	// S3 client for skill file storage.
+	s3Client := s3.NewFromConfig(awsCfg)
+	skillsBucket := os.Getenv("SKILLS_BUCKET")
 
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
 		// Load agent profile dynamically per request.
@@ -94,7 +102,7 @@ func init() {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
 
-		systemPrompt := buildPrompt(context.Background(), agentProfile, settingsSvc, notesSvc)
+		systemPrompt := buildPrompt(context.Background(), agentProfile, settingsSvc, notesSvc, skillsSvc)
 
 		registry := tool.NewRegistry()
 		registry.Register(&tool.TimeTool{})
@@ -114,6 +122,11 @@ func init() {
 			Provider: websearch.NewDuckDuckGoProvider(),
 		})
 		registry.Register(webfetch.New())
+		registry.Register(&toolskills.Tool{
+			Skills:   skillsSvc,
+			S3Client: s3Client,
+			Bucket:   skillsBucket,
+		})
 
 		a := agent.NewFromContext(
 			p, systemPrompt, registry, 128000,
@@ -163,7 +176,7 @@ func init() {
 	svc = chat.NewService(pool, createFn)
 }
 
-func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *settings.Service, notesSvc *notes.Service) string {
+func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
 	var cfg agent.PromptConfig
 	cfg.Soul = agentProfile.Soul
 	if user, err := settingsSvc.GetKVSetting(ctx, settings.SettingUserProfile); err == nil {
@@ -171,6 +184,9 @@ func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *s
 	}
 	if memories, err := notesSvc.FormatForPrompt(ctx, agentProfile.ID, agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
+	}
+	if skillList, err := skillsSvc.ListSkills(ctx); err == nil {
+		cfg.Skills = appskills.FormatForPrompt(skillList)
 	}
 	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
 }

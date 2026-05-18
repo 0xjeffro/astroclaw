@@ -81,6 +81,7 @@ type PromptConfig struct {
 	Soul     string // agent personality, tone, boundaries
 	User     string // user profile (name, role, preferences)
 	Memories string // accumulated knowledge from conversations
+	Skills   string // available skills index (name + description + when_to_use)
 }
 
 // CharLimits controls truncation for each prompt section.
@@ -144,7 +145,14 @@ func BuildSystemPrompt(cfg PromptConfig, limits CharLimits) string {
 		b.WriteString("</memory-context>\n\n")
 	}
 
-	// 8. Runtime context
+	// 8. Skills index (names + descriptions only, full content loaded on demand)
+	if cfg.Skills != "" {
+		b.WriteString("## Skills\n")
+		b.WriteString(cfg.Skills)
+		b.WriteString("\n\n")
+	}
+
+	// 9. Runtime context
 	// TODO: allow user to configure their timezone via Settings App.
 	// Currently uses the server's timezone (UTC on Lambda, local on CLI).
 	b.WriteString("## Runtime\n")
