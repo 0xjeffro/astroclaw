@@ -28,19 +28,30 @@ func (t *ArithmeticTool) Parameters() map[string]any {
 		"required": []string{"expression"},
 	}
 }
-func (t *ArithmeticTool) Execute(_ context.Context, args string) (string, error) {
+func (t *ArithmeticTool) Execute(_ context.Context, args string) *ToolResult {
 	var p struct {
 		Expression string `json:"expression"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult {
+			IsError: true,
+			ForLLM: fmt.Sprintf("bad args: %w", err)
+			Err: err
+		} 
 	}
 	fs := token.NewFileSet()
 	tv, err := types.Eval(fs, nil, token.NoPos, p.Expression)
 	if err != nil {
-		return "", fmt.Errorf("cannot evaluate: %w", err)
+		return &ToolResult {
+			IsError: true,
+			ForLLM: fmt.Sprintf("cannot evaluate: %w", err)
+			Err: err
+		} 
 	}
-	return tv.Value.ExactString(), nil
+	return &ToolResult{
+		ForLLM: tv.Value.ExactString(),
+		IsError: false,
+	}
 }
 func (t *ArithmeticTool) Approval() bool  { return false }
 func (t *ArithmeticTool) Workspace() bool { return false }

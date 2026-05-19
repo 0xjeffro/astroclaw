@@ -18,8 +18,10 @@ func (t *TimeTool) Parameters() map[string]any {
 		"required":   []string{},
 	}
 }
-func (t *TimeTool) Execute(_ context.Context, _ string) (string, error) {
-	return time.Now().Format(time.RFC3339), nil
+func (t *TimeTool) Execute(_ context.Context, _ string) *ToolResult {
+	return &ToolResult{
+		ForLLM: time.Now().Format(time.RFC3339),
+	}
 }
 func (t *TimeTool) Approval() bool  { return false }
 func (t *TimeTool) Workspace() bool { return false }

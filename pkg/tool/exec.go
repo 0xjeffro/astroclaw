@@ -37,12 +37,16 @@ func (t *ExecCommandTool) Parameters() map[string]any {
 		"required": []string{"command"},
 	}
 }
-func (t *ExecCommandTool) Execute(parentCtx context.Context, args string) (string, error) {
+func (t *ExecCommandTool) Execute(parentCtx context.Context, args string) *ToolResult {
 	var p struct {
 		Command string `json:"command"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("bad args: %s", err),
+			Err:     err,
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(parentCtx, execTimeout)
@@ -59,10 +63,16 @@ func (t *ExecCommandTool) Execute(parentCtx context.Context, args string) (strin
 	result, _ := truncateOutput(string(output))
 
 	if err != nil {
-		return fmt.Sprintf("%s\n[exit error: %v]", result, err), nil
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("%s\n[exit error: %v]", result, err),
+			Err:     err,
+		}
 	}
 
-	return result, nil
+	return &ToolResult{
+		ForLLM: result,
+	}
 }
 func (t *ExecCommandTool) Approval() bool  { return true }
 func (t *ExecCommandTool) Workspace() bool { return true }
