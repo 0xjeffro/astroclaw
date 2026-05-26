@@ -109,6 +109,7 @@ CREATE TABLE "public"."app_skills" (
 CREATE TABLE "public"."app_system_connections" (
   "connection_id" text NOT NULL,
   "user_id" uuid NOT NULL,
+  "workspace_id" uuid NOT NULL,
   "connected_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("connection_id")
 );
@@ -117,9 +118,26 @@ CREATE TABLE "public"."app_system_users" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "email" text NOT NULL,
   "name" text NOT NULL,
-  "role" text NOT NULL DEFAULT 'guest',
+  "role" text NOT NULL DEFAULT 'user',
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("id"),
   CONSTRAINT "app_system_users_email_key" UNIQUE ("email")
+);
+-- Create "app_system_workspace_members" table
+CREATE TABLE "public"."app_system_workspace_members" (
+  "workspace_id" uuid NOT NULL,
+  "user_id" uuid NOT NULL,
+  "role" text NOT NULL DEFAULT 'member',
+  "joined_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("user_id", "workspace_id")
+);
+-- Create "app_system_workspaces" table
+CREATE TABLE "public"."app_system_workspaces" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "name" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "deleted_at" timestamptz NULL,
+  PRIMARY KEY ("id")
 );

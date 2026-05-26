@@ -16,9 +16,9 @@ import (
 type wsEventMsg chat.WSEvent
 
 // connectWS establishes a WebSocket connection to the API Gateway.
-func connectWS(wsURL, userID, apiKey string) (*websocket.Conn, error) {
+func connectWS(wsURL, userID, workspaceID, apiKey string) (*websocket.Conn, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(
-		wsURL+"?user_id="+userID+"&api_key="+apiKey,
+		wsURL+"?user_id="+userID+"&workspace_id="+workspaceID+"&api_key="+apiKey,
 		nil,
 	)
 	if err != nil {

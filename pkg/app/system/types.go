@@ -11,10 +11,16 @@ var (
 	ErrNotFound = errors.New("not found")
 )
 
-// User role constants.
+// Platform-level roles (app_system_users.role).
 const (
-	RoleOwner = "owner"
-	RoleGuest = "guest"
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+)
+
+// Workspace-level roles (app_system_memberships.role).
+const (
+	WorkspaceRoleOwner  = "owner"
+	WorkspaceRoleMember = "member"
 )
 
 type User struct {
@@ -37,9 +43,66 @@ func UserFromDB(u db.AppSystemUser) *User {
 	}
 }
 
+type Workspace struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
+}
+
+func WorkspaceFromDB(w db.AppSystemWorkspace) *Workspace {
+	return &Workspace{
+		ID:        w.ID,
+		Name:      w.Name,
+		CreatedAt: w.CreatedAt,
+		UpdatedAt: w.UpdatedAt,
+		DeletedAt: w.DeletedAt,
+	}
+}
+
+type Membership struct {
+	UserID      string
+	WorkspaceID string
+	Role        string
+	JoinedAt    time.Time
+}
+
+func MembershipFromDB(m db.AppSystemWorkspaceMember) *Membership {
+	return &Membership{
+		UserID:      m.UserID,
+		WorkspaceID: m.WorkspaceID,
+		Role:        m.Role,
+		JoinedAt:    m.JoinedAt,
+	}
+}
+
+// WorkspaceMember pairs a user with their role in a specific workspace.
+type WorkspaceMember struct {
+	User          *User
+	WorkspaceRole string
+	JoinedAt      time.Time
+}
+
+func WorkspaceMemberFromDB(r db.ListMembersByWorkspaceRow) *WorkspaceMember {
+	return &WorkspaceMember{
+		User: &User{
+			ID:        r.ID,
+			Email:     r.Email,
+			Name:      r.Name,
+			Role:      r.Role,
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+		},
+		WorkspaceRole: r.WorkspaceRole,
+		JoinedAt:      r.JoinedAt,
+	}
+}
+
 type Connection struct {
 	ConnectionID string
 	UserID       string
+	WorkspaceID  string
 	ConnectedAt  time.Time
 }
 
@@ -47,6 +110,7 @@ func ConnectionFromDB(c db.AppSystemConnection) *Connection {
 	return &Connection{
 		ConnectionID: c.ConnectionID,
 		UserID:       c.UserID,
+		WorkspaceID:  c.WorkspaceID,
 		ConnectedAt:  c.ConnectedAt,
 	}
 }

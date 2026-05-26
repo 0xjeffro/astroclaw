@@ -94,8 +94,8 @@ func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error 
 	return nil
 }
 
-func (r *remoteBackend) GetOwnerID(ctx context.Context) (string, error) {
-	resp, err := r.get(ctx, "/users/owner")
+func (r *remoteBackend) GetAdminID(ctx context.Context) (string, error) {
+	resp, err := r.get(ctx, "/users/admin")
 	if err != nil {
 		return "", err
 	}
@@ -103,9 +103,27 @@ func (r *remoteBackend) GetOwnerID(ctx context.Context) (string, error) {
 		ID string `json:"ID"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
-		return "", fmt.Errorf("parse owner response: %w", err)
+		return "", fmt.Errorf("parse admin response: %w", err)
 	}
 	return result.ID, nil
+}
+
+func (r *remoteBackend) ListUserWorkspaces(ctx context.Context, userID string) ([]string, error) {
+	resp, err := r.get(ctx, "/users/"+userID+"/workspaces")
+	if err != nil {
+		return nil, err
+	}
+	var result []struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse workspaces response: %w", err)
+	}
+	ids := make([]string, len(result))
+	for i, w := range result {
+		ids[i] = w.ID
+	}
+	return ids, nil
 }
 
 func (r *remoteBackend) GetSetting(ctx context.Context, name string) (string, error) {
@@ -210,18 +228,28 @@ func main() {
 	backend := newRemoteBackend(apiURL, replyURL, os.Getenv("API_KEY"))
 	fmt.Printf("AstroClaw (remote: %s) - type /exit to quit\n", apiURL)
 
-	// Fetch owner user ID and default agent ID.
-	ownerID, err := backend.GetOwnerID(ctx)
+	// Fetch admin user ID, admin's workspace, and default agent ID.
+	adminID, err := backend.GetAdminID(ctx)
 	if err != nil {
-		log.Fatalf("failed to get owner: %v", err)
+		log.Fatalf("failed to get admin: %v", err)
 	}
+	workspaces, err := backend.ListUserWorkspaces(ctx, adminID)
+	if err != nil {
+		log.Fatalf("failed to list admin workspaces: %v", err)
+	}
+	if len(workspaces) == 0 {
+		log.Fatalf("admin has no workspaces")
+	}
+
+	// TODO: support switch workspace
+	workspaceID := workspaces[0]
 	defaultAgentID, err := backend.GetSetting(ctx, settings.SettingDefaultAgentID)
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}
 
 	wsConn, _, err := websocket.DefaultDialer.Dial(
-		wsURL+"?user_id="+ownerID+"&api_key="+os.Getenv("API_KEY"),
+		wsURL+"?user_id="+adminID+"&workspace_id="+workspaceID+"&api_key="+os.Getenv("API_KEY"),
 		nil,
 	)
 	if err != nil {
@@ -292,8 +320,8 @@ func main() {
 		}
 	}()
 
-	// Create a default session on startup with the owner and default agent.
-	defaultSession, err := backend.NewSession(ctx, ownerID, []string{defaultAgentID}, "default")
+	// Create a default session on startup with the admin and default agent.
+	defaultSession, err := backend.NewSession(ctx, adminID, []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -329,7 +357,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := backend.NewSession(ctx, ownerID, []string{defaultAgentID}, title)
+			s, err := backend.NewSession(ctx, adminID, []string{defaultAgentID}, title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue

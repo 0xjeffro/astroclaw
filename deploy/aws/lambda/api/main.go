@@ -75,8 +75,11 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	case method == "GET" && strings.HasPrefix(path, "/settings/"):
 		name := strings.TrimPrefix(path, "/settings/")
 		return handleGetSetting(ctx, name)
-	case method == "GET" && path == "/users/owner":
-		return handleGetOwner(ctx)
+	case method == "GET" && path == "/users/admin":
+		return handleGetAdmin(ctx)
+	case method == "GET" && strings.HasPrefix(path, "/users/") && strings.HasSuffix(path, "/workspaces"):
+		userID := strings.TrimSuffix(strings.TrimPrefix(path, "/users/"), "/workspaces")
+		return handleListUserWorkspaces(ctx, userID)
 	}
 
 	return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
@@ -130,12 +133,20 @@ func handleGetSetting(ctx context.Context, name string) (events.APIGatewayV2HTTP
 	return jsonResponse(http.StatusOK, s)
 }
 
-func handleGetOwner(ctx context.Context) (events.APIGatewayV2HTTPResponse, error) {
-	u, err := systemSvc.GetOwner(ctx)
+func handleGetAdmin(ctx context.Context) (events.APIGatewayV2HTTPResponse, error) {
+	u, err := systemSvc.GetAdmin(ctx)
 	if err != nil {
 		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusOK, u)
+}
+
+func handleListUserWorkspaces(ctx context.Context, userID string) (events.APIGatewayV2HTTPResponse, error) {
+	ws, err := systemSvc.ListWorkspacesForUser(ctx, userID)
+	if err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return jsonResponse(http.StatusOK, ws)
 }
 
 func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error) {

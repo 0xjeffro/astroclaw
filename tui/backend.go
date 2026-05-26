@@ -32,8 +32,8 @@ type sessionInfo struct {
 	Title string `json:"Title"`
 }
 
-func (b *backend) getOwnerID(ctx context.Context) (string, error) {
-	resp, err := b.get(ctx, "/users/owner")
+func (b *backend) getAdminID(ctx context.Context) (string, error) {
+	resp, err := b.get(ctx, "/users/admin")
 	if err != nil {
 		return "", err
 	}
@@ -41,9 +41,27 @@ func (b *backend) getOwnerID(ctx context.Context) (string, error) {
 		ID string `json:"ID"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
-		return "", fmt.Errorf("parse owner: %w", err)
+		return "", fmt.Errorf("parse admin: %w", err)
 	}
 	return result.ID, nil
+}
+
+func (b *backend) listUserWorkspaces(ctx context.Context, userID string) ([]string, error) {
+	resp, err := b.get(ctx, "/users/"+userID+"/workspaces")
+	if err != nil {
+		return nil, err
+	}
+	var result []struct {
+		ID string `json:"ID"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse workspaces: %w", err)
+	}
+	ids := make([]string, len(result))
+	for i, w := range result {
+		ids[i] = w.ID
+	}
+	return ids, nil
 }
 
 func (b *backend) getSetting(ctx context.Context, name string) (string, error) {

@@ -27,29 +27,37 @@ func main() {
 	ctx := context.Background()
 	backend := newBackend(apiURL, replyURL, apiKey)
 
-	// Fetch owner and default agent.
-	ownerID, err := backend.getOwnerID(ctx)
+	// Fetch admin, workspace, and default agent.
+	adminID, err := backend.getAdminID(ctx)
 	if err != nil {
-		log.Fatalf("failed to get owner: %v", err)
+		log.Fatalf("failed to get admin: %v", err)
 	}
+	workspaces, err := backend.listUserWorkspaces(ctx, adminID)
+	if err != nil {
+		log.Fatalf("failed to list workspaces: %v", err)
+	}
+	if len(workspaces) == 0 {
+		log.Fatalf("admin has no workspaces")
+	}
+	workspaceID := workspaces[0]
 	defaultAgentID, err := backend.getSetting(ctx, "default_agent_id")
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}
 
 	// Create a default session.
-	session, err := backend.newSession(ctx, ownerID, []string{defaultAgentID}, "default")
+	session, err := backend.newSession(ctx, adminID, []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatalf("failed to create session: %v", err)
 	}
 
 	// Connect WebSocket.
-	ws, err := connectWS(wsURL, ownerID, apiKey)
+	ws, err := connectWS(wsURL, adminID, workspaceID, apiKey)
 	if err != nil {
 		log.Fatalf("failed to connect WebSocket: %v", err)
 	}
 
-	model := newModel(backend, ws, session.ID, ownerID, defaultAgentID)
+	model := newModel(backend, ws, session.ID, adminID, defaultAgentID)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {

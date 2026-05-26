@@ -11,6 +11,7 @@ import (
 type AppSystemConnection struct {
 	ConnectionID string
 	UserID       string
+	WorkspaceID  string
 	ConnectedAt  time.Time
 }
 
@@ -21,4 +22,19 @@ type AppSystemUser struct {
 	Role      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type AppSystemWorkspace struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt *time.Time
+}
+
+type AppSystemWorkspaceMember struct {
+	WorkspaceID string
+	UserID      string
+	Role        string
+	JoinedAt    time.Time
 }

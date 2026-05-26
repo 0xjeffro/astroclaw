@@ -7,22 +7,42 @@ package db
 
 import (
 	"context"
+	"time"
 )
+
+const addMembership = `-- name: AddMembership :exec
+
+INSERT INTO app_system_workspace_members (user_id, workspace_id, role)
+VALUES ($1, $2, $3)
+`
+
+type AddMembershipParams struct {
+	UserID      string
+	WorkspaceID string
+	Role        string
+}
+
+// Workspace Members
+func (q *Queries) AddMembership(ctx context.Context, arg AddMembershipParams) error {
+	_, err := q.db.Exec(ctx, addMembership, arg.UserID, arg.WorkspaceID, arg.Role)
+	return err
+}
 
 const createConnection = `-- name: CreateConnection :exec
 
-INSERT INTO app_system_connections (connection_id, user_id)
-VALUES ($1, $2)
+INSERT INTO app_system_connections (connection_id, user_id, workspace_id)
+VALUES ($1, $2, $3)
 `
 
 type CreateConnectionParams struct {
 	ConnectionID string
 	UserID       string
+	WorkspaceID  string
 }
 
 // Connections
 func (q *Queries) CreateConnection(ctx context.Context, arg CreateConnectionParams) error {
-	_, err := q.db.Exec(ctx, createConnection, arg.ConnectionID, arg.UserID)
+	_, err := q.db.Exec(ctx, createConnection, arg.ConnectionID, arg.UserID, arg.WorkspaceID)
 	return err
 }
 
@@ -54,6 +74,27 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppSyst
 	return i, err
 }
 
+const createWorkspace = `-- name: CreateWorkspace :one
+
+INSERT INTO app_system_workspaces (name)
+VALUES ($1)
+RETURNING id, name, created_at, updated_at, deleted_at
+`
+
+// Workspaces
+func (q *Queries) CreateWorkspace(ctx context.Context, name string) (AppSystemWorkspace, error) {
+	row := q.db.QueryRow(ctx, createWorkspace, name)
+	var i AppSystemWorkspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const deleteConnection = `-- name: DeleteConnection :exec
 DELETE FROM app_system_connections WHERE connection_id = $1
 `
@@ -63,8 +104,26 @@ func (q *Queries) DeleteConnection(ctx context.Context, connectionID string) err
 	return err
 }
 
+const getAdmin = `-- name: GetAdmin :one
+SELECT id, email, name, role, created_at, updated_at FROM app_system_users WHERE role = 'admin' LIMIT 1
+`
+
+func (q *Queries) GetAdmin(ctx context.Context) (AppSystemUser, error) {
+	row := q.db.QueryRow(ctx, getAdmin)
+	var i AppSystemUser
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getConnectionsByUser = `-- name: GetConnectionsByUser :many
-SELECT connection_id, user_id, connected_at FROM app_system_connections WHERE user_id = $1
+SELECT connection_id, user_id, workspace_id, connected_at FROM app_system_connections WHERE user_id = $1
 `
 
 func (q *Queries) GetConnectionsByUser(ctx context.Context, userID string) ([]AppSystemConnection, error) {
@@ -76,7 +135,12 @@ func (q *Queries) GetConnectionsByUser(ctx context.Context, userID string) ([]Ap
 	var items []AppSystemConnection
 	for rows.Next() {
 		var i AppSystemConnection
-		if err := rows.Scan(&i.ConnectionID, &i.UserID, &i.ConnectedAt); err != nil {
+		if err := rows.Scan(
+			&i.ConnectionID,
+			&i.UserID,
+			&i.WorkspaceID,
+			&i.ConnectedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -87,20 +151,24 @@ func (q *Queries) GetConnectionsByUser(ctx context.Context, userID string) ([]Ap
 	return items, nil
 }
 
-const getOwner = `-- name: GetOwner :one
-SELECT id, email, name, role, created_at, updated_at FROM app_system_users WHERE role = 'owner' LIMIT 1
+const getMembership = `-- name: GetMembership :one
+SELECT workspace_id, user_id, role, joined_at FROM app_system_workspace_members
+WHERE user_id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) GetOwner(ctx context.Context) (AppSystemUser, error) {
-	row := q.db.QueryRow(ctx, getOwner)
-	var i AppSystemUser
+type GetMembershipParams struct {
+	UserID      string
+	WorkspaceID string
+}
+
+func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (AppSystemWorkspaceMember, error) {
+	row := q.db.QueryRow(ctx, getMembership, arg.UserID, arg.WorkspaceID)
+	var i AppSystemWorkspaceMember
 	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Name,
+		&i.WorkspaceID,
+		&i.UserID,
 		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.JoinedAt,
 	)
 	return i, err
 }
@@ -121,6 +189,90 @@ func (q *Queries) GetUser(ctx context.Context, id string) (AppSystemUser, error)
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, name, role, created_at, updated_at FROM app_system_users WHERE email = $1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppSystemUser, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i AppSystemUser
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getWorkspace = `-- name: GetWorkspace :one
+SELECT id, name, created_at, updated_at, deleted_at FROM app_system_workspaces
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetWorkspace(ctx context.Context, id string) (AppSystemWorkspace, error) {
+	row := q.db.QueryRow(ctx, getWorkspace, id)
+	var i AppSystemWorkspace
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const listMembersByWorkspace = `-- name: ListMembersByWorkspace :many
+SELECT u.id, u.email, u.name, u.role, u.created_at, u.updated_at, m.role AS workspace_role, m.joined_at
+FROM app_system_users u
+JOIN app_system_workspace_members m ON m.user_id = u.id
+WHERE m.workspace_id = $1
+ORDER BY m.joined_at
+`
+
+type ListMembersByWorkspaceRow struct {
+	ID            string
+	Email         string
+	Name          string
+	Role          string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	WorkspaceRole string
+	JoinedAt      time.Time
+}
+
+func (q *Queries) ListMembersByWorkspace(ctx context.Context, workspaceID string) ([]ListMembersByWorkspaceRow, error) {
+	rows, err := q.db.Query(ctx, listMembersByWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersByWorkspaceRow
+	for rows.Next() {
+		var i ListMembersByWorkspaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.WorkspaceRole,
+			&i.JoinedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUsers = `-- name: ListUsers :many
@@ -152,4 +304,128 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppSystemUser, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listWorkspaces = `-- name: ListWorkspaces :many
+SELECT id, name, created_at, updated_at, deleted_at FROM app_system_workspaces
+WHERE deleted_at IS NULL
+ORDER BY created_at
+`
+
+func (q *Queries) ListWorkspaces(ctx context.Context) ([]AppSystemWorkspace, error) {
+	rows, err := q.db.Query(ctx, listWorkspaces)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AppSystemWorkspace
+	for rows.Next() {
+		var i AppSystemWorkspace
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
+SELECT w.id, w.name, w.created_at, w.updated_at, w.deleted_at FROM app_system_workspaces w
+JOIN app_system_workspace_members m ON m.workspace_id = w.id
+WHERE m.user_id = $1 AND w.deleted_at IS NULL
+ORDER BY w.created_at
+`
+
+func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID string) ([]AppSystemWorkspace, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AppSystemWorkspace
+	for rows.Next() {
+		var i AppSystemWorkspace
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeMembership = `-- name: RemoveMembership :exec
+DELETE FROM app_system_workspace_members
+WHERE user_id = $1 AND workspace_id = $2
+`
+
+type RemoveMembershipParams struct {
+	UserID      string
+	WorkspaceID string
+}
+
+func (q *Queries) RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error {
+	_, err := q.db.Exec(ctx, removeMembership, arg.UserID, arg.WorkspaceID)
+	return err
+}
+
+const softDeleteWorkspace = `-- name: SoftDeleteWorkspace :exec
+UPDATE app_system_workspaces
+SET deleted_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteWorkspace(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, softDeleteWorkspace, id)
+	return err
+}
+
+const updateMembershipRole = `-- name: UpdateMembershipRole :exec
+UPDATE app_system_workspace_members
+SET role = $1
+WHERE user_id = $2 AND workspace_id = $3
+`
+
+type UpdateMembershipRoleParams struct {
+	Role        string
+	UserID      string
+	WorkspaceID string
+}
+
+func (q *Queries) UpdateMembershipRole(ctx context.Context, arg UpdateMembershipRoleParams) error {
+	_, err := q.db.Exec(ctx, updateMembershipRole, arg.Role, arg.UserID, arg.WorkspaceID)
+	return err
+}
+
+const updateWorkspaceName = `-- name: UpdateWorkspaceName :exec
+UPDATE app_system_workspaces
+SET name = $1, updated_at = now()
+WHERE id = $2
+`
+
+type UpdateWorkspaceNameParams struct {
+	Name string
+	ID   string
+}
+
+func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) error {
+	_, err := q.db.Exec(ctx, updateWorkspaceName, arg.Name, arg.ID)
+	return err
 }

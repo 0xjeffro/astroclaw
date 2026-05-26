@@ -88,6 +88,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 		return nil, err
 	}
 
+	if err := seedDefaultWorkspace(ctx, pool); err != nil {
+		return nil, err
+	}
+
 	if err := seedDefaultAgent(ctx, pool); err != nil {
 		return nil, err
 	}
@@ -265,20 +269,54 @@ func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// seedDefaultUser creates the owner user on first deploy if none exists.
+// seedDefaultUser creates the admin user on first deploy if none exists.
 func seedDefaultUser(ctx context.Context, pool *pgxpool.Pool) error {
 	svc := system.NewService(pool)
 
-	if _, err := svc.GetOwner(ctx); err == nil {
-		log.Println("owner user already exists, skipping seed")
+	if _, err := svc.GetAdmin(ctx); err == nil {
+		log.Println("admin user already exists, skipping seed")
 		return nil
 	}
 
-	u, err := svc.CreateUser(ctx, "owner@astroclaw.local", "Owner", system.RoleOwner)
+	// TODO: The admin email here is just a place holder, need a better way to set it.
+	u, err := svc.CreateUser(ctx, "admin@astroclaw.local", "Admin", system.RoleAdmin)
 	if err != nil {
-		return fmt.Errorf("seed owner user: %w", err)
+		return fmt.Errorf("seed admin user: %w", err)
 	}
-	log.Printf("seeded owner user: %s (%s)", u.Name, u.ID)
+	log.Printf("seeded admin user: %s (%s)", u.Name, u.ID)
+
+	return nil
+}
+
+// seedDefaultWorkspace creates a default workspace and adds the admin to it as
+// owner, unless the admin is already a member of some workspace.
+func seedDefaultWorkspace(ctx context.Context, pool *pgxpool.Pool) error {
+	svc := system.NewService(pool)
+
+	admin, err := svc.GetAdmin(ctx)
+	if err != nil {
+		return fmt.Errorf("get admin for workspace seed: %w", err)
+	}
+
+	existing, err := svc.ListWorkspacesForUser(ctx, admin.ID)
+	if err != nil {
+		return fmt.Errorf("list workspaces for admin: %w", err)
+	}
+	if len(existing) > 0 {
+		log.Println("admin already belongs to a workspace, skipping seed")
+		return nil
+	}
+
+	w, err := svc.CreateWorkspace(ctx, "Default")
+	if err != nil {
+		return fmt.Errorf("seed default workspace: %w", err)
+	}
+	log.Printf("seeded default workspace: %s (%s)", w.Name, w.ID)
+
+	if err := svc.AddMembership(ctx, admin.ID, w.ID, system.WorkspaceRoleOwner); err != nil {
+		return fmt.Errorf("add admin to default workspace: %w", err)
+	}
+	log.Printf("added admin to default workspace as owner")
 
 	return nil
 }

@@ -68,25 +68,28 @@ func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (e
 		}
 	}
 
-	// Extract user_id from query string and verify the user exists.
-	// Currently only the owner can connect (single-user system).
+	// Extract user_id and workspace_id from query string.
+	// TODO: replace query params with JWT-based auth so the server can verify
+	// identity without trusting client-provided IDs.
 	userID := req.QueryStringParameters["user_id"]
-	if userID == "" {
+	workspaceID := req.QueryStringParameters["workspace_id"]
+	if userID == "" || workspaceID == "" {
 		return events.APIGatewayProxyResponse{StatusCode: 400}, nil
 	}
-	user, err := systemSvc.GetUser(ctx, userID)
-	if err != nil || user.Role != system.RoleOwner {
+
+	// Verify the user is a member of this workspace.
+	if _, err := systemSvc.GetMembership(ctx, userID, workspaceID); err != nil {
 		return events.APIGatewayProxyResponse{StatusCode: 403}, nil
 	}
 
 	// Store connection.
 	connectionID := req.RequestContext.ConnectionID
-	if err := systemSvc.CreateWSConnectRecord(ctx, connectionID, userID); err != nil {
+	if err := systemSvc.CreateWSConnectRecord(ctx, connectionID, userID, workspaceID); err != nil {
 		log.Printf("failed to store connection %s: %v", connectionID, err)
 		return events.APIGatewayProxyResponse{StatusCode: 500}, nil
 	}
 
-	log.Printf("connected: %s (user: %s)", connectionID, userID)
+	log.Printf("connected: %s (user: %s, workspace: %s)", connectionID, userID, workspaceID)
 	return events.APIGatewayProxyResponse{StatusCode: 200}, nil
 }
 
