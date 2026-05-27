@@ -12,6 +12,7 @@ import (
 )
 
 const addSessionAgent = `-- name: AddSessionAgent :exec
+
 INSERT INTO app_chat_session_agents (session_id, agent_id)
 VALUES ($1, $2)
 `
@@ -21,6 +22,8 @@ type AddSessionAgentParams struct {
 	AgentID   string
 }
 
+// Child tables (messages, members, agents) are scoped by session_id.
+// Access control is enforced by first looking up the session with workspace_id.
 func (q *Queries) AddSessionAgent(ctx context.Context, arg AddSessionAgentParams) error {
 	_, err := q.db.Exec(ctx, addSessionAgent, arg.SessionID, arg.AgentID)
 	return err
@@ -88,14 +91,15 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (A
 }
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO app_chat_sessions (title, user_id, model, system_prompt, context_window, context_messages, context_summary)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at
+INSERT INTO app_chat_sessions (workspace_id, user_id, title, model, system_prompt, context_window, context_messages, context_summary)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, workspace_id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at
 `
 
 type CreateSessionParams struct {
-	Title           string
+	WorkspaceID     string
 	UserID          string
+	Title           string
 	Model           string
 	SystemPrompt    string
 	ContextWindow   int32
@@ -105,8 +109,9 @@ type CreateSessionParams struct {
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (AppChatSession, error) {
 	row := q.db.QueryRow(ctx, createSession,
-		arg.Title,
+		arg.WorkspaceID,
 		arg.UserID,
+		arg.Title,
 		arg.Model,
 		arg.SystemPrompt,
 		arg.ContextWindow,
@@ -116,6 +121,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (A
 	var i AppChatSession
 	err := row.Scan(
 		&i.ID,
+		&i.WorkspaceID,
 		&i.UserID,
 		&i.Title,
 		&i.Model,
@@ -145,7 +151,8 @@ func (q *Queries) DeleteSessionMember(ctx context.Context, arg DeleteSessionMemb
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE id = $1 AND deleted_at IS NULL
+SELECT id, workspace_id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetSession(ctx context.Context, id string) (AppChatSession, error) {
@@ -153,6 +160,7 @@ func (q *Queries) GetSession(ctx context.Context, id string) (AppChatSession, er
 	var i AppChatSession
 	err := row.Scan(
 		&i.ID,
+		&i.WorkspaceID,
 		&i.UserID,
 		&i.Title,
 		&i.Model,
@@ -256,12 +264,19 @@ func (q *Queries) ListSessionMembers(ctx context.Context, sessionID string) ([]A
 	return items, nil
 }
 
-const listSessions = `-- name: ListSessions :many
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE deleted_at IS NULL ORDER BY created_at DESC
+const listSessionsByUserInWorkspace = `-- name: ListSessionsByUserInWorkspace :many
+SELECT id, workspace_id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions
+WHERE user_id = $1 AND workspace_id = $2 AND deleted_at IS NULL
+ORDER BY created_at DESC
 `
 
-func (q *Queries) ListSessions(ctx context.Context) ([]AppChatSession, error) {
-	rows, err := q.db.Query(ctx, listSessions)
+type ListSessionsByUserInWorkspaceParams struct {
+	UserID      string
+	WorkspaceID string
+}
+
+func (q *Queries) ListSessionsByUserInWorkspace(ctx context.Context, arg ListSessionsByUserInWorkspaceParams) ([]AppChatSession, error) {
+	rows, err := q.db.Query(ctx, listSessionsByUserInWorkspace, arg.UserID, arg.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +286,7 @@ func (q *Queries) ListSessions(ctx context.Context) ([]AppChatSession, error) {
 		var i AppChatSession
 		if err := rows.Scan(
 			&i.ID,
+			&i.WorkspaceID,
 			&i.UserID,
 			&i.Title,
 			&i.Model,
@@ -292,12 +308,14 @@ func (q *Queries) ListSessions(ctx context.Context) ([]AppChatSession, error) {
 	return items, nil
 }
 
-const listSessionsByUser = `-- name: ListSessionsByUser :many
-SELECT id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC
+const listSessionsByWorkspace = `-- name: ListSessionsByWorkspace :many
+SELECT id, workspace_id, user_id, title, model, system_prompt, context_window, context_messages, context_summary, created_at, updated_at, deleted_at FROM app_chat_sessions
+WHERE workspace_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC
 `
 
-func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]AppChatSession, error) {
-	rows, err := q.db.Query(ctx, listSessionsByUser, userID)
+func (q *Queries) ListSessionsByWorkspace(ctx context.Context, workspaceID string) ([]AppChatSession, error) {
+	rows, err := q.db.Query(ctx, listSessionsByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +325,7 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]AppC
 		var i AppChatSession
 		if err := rows.Scan(
 			&i.ID,
+			&i.WorkspaceID,
 			&i.UserID,
 			&i.Title,
 			&i.Model,
@@ -329,7 +348,9 @@ func (q *Queries) ListSessionsByUser(ctx context.Context, userID string) ([]AppC
 }
 
 const softDeleteSession = `-- name: SoftDeleteSession :exec
-UPDATE app_chat_sessions SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
+UPDATE app_chat_sessions
+SET deleted_at = now()
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteSession(ctx context.Context, id string) error {

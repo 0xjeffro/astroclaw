@@ -61,17 +61,28 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	path := req.RequestContext.HTTP.Path
 	method := req.RequestContext.HTTP.Method
 
+	// Workspace-scoped routes: /workspaces/{workspaceID}/sessions[/{sessionID}]
+	if strings.HasPrefix(path, "/workspaces/") {
+		segs := strings.Split(strings.Trim(path, "/"), "/")
+		// segs: ["workspaces", "{wsID}", "sessions", ...]
+		if len(segs) < 3 || segs[2] != "sessions" {
+			return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
+		}
+		workspaceID := segs[1]
+		switch {
+		case method == "POST" && len(segs) == 3:
+			return handleCreateSessionInWorkspace(ctx, workspaceID, req)
+		case method == "GET" && len(segs) == 3:
+			return handleListSessions(ctx, workspaceID)
+		case method == "GET" && len(segs) == 4:
+			return handleGetSession(ctx, segs[3])
+		case method == "DELETE" && len(segs) == 4:
+			return handleDeleteSession(ctx, segs[3])
+		}
+		return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
+	}
+
 	switch {
-	case method == "POST" && path == "/sessions":
-		return handleCreateSession(ctx, req)
-	case method == "GET" && path == "/sessions":
-		return handleListSessions(ctx)
-	case method == "GET" && strings.HasPrefix(path, "/sessions/"):
-		id := strings.TrimPrefix(path, "/sessions/")
-		return handleGetSession(ctx, id)
-	case method == "DELETE" && strings.HasPrefix(path, "/sessions/"):
-		id := strings.TrimPrefix(path, "/sessions/")
-		return handleDeleteSession(ctx, id)
 	case method == "GET" && strings.HasPrefix(path, "/settings/"):
 		name := strings.TrimPrefix(path, "/settings/")
 		return handleGetSetting(ctx, name)
@@ -85,7 +96,7 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
-func handleCreateSession(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+func handleCreateSessionInWorkspace(ctx context.Context, workspaceID string, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
 	var body struct {
 		UserID   string   `json:"user_id"`
 		AgentIDs []string `json:"agent_ids"`
@@ -95,15 +106,15 @@ func handleCreateSession(ctx context.Context, req events.APIGatewayV2HTTPRequest
 		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 	}
 
-	s, err := svc.NewSession(ctx, body.UserID, body.AgentIDs, body.Title)
+	s, err := svc.CreateSessionInWorkspace(ctx, workspaceID, body.UserID, body.AgentIDs, body.Title)
 	if err != nil {
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusCreated, s)
 }
 
-func handleListSessions(ctx context.Context) (events.APIGatewayV2HTTPResponse, error) {
-	sessions, err := svc.ListSessions(ctx)
+func handleListSessions(ctx context.Context, workspaceID string) (events.APIGatewayV2HTTPResponse, error) {
+	sessions, err := svc.ListSessionsByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}

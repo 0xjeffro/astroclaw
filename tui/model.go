@@ -53,6 +53,7 @@ type chatMessage struct {
 type model struct {
 	backend        *backend
 	wsConn         *websocket.Conn
+	workspaceID    string
 	sessionID      string
 	ownerID        string
 	defaultAgentID string
@@ -91,7 +92,7 @@ type replyDoneMsg struct {
 	err error
 }
 
-func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID string) model {
+func newModel(b *backend, ws *websocket.Conn, workspaceID, sessionID, ownerID, defaultAgentID string) model {
 	ti := textinput.New()
 	ti.Placeholder = "Type a message..."
 	ti.Focus()
@@ -103,6 +104,7 @@ func newModel(b *backend, ws *websocket.Conn, sessionID, ownerID, defaultAgentID
 	return model{
 		backend:        b,
 		wsConn:         ws,
+		workspaceID:    workspaceID,
 		sessionID:      sessionID,
 		ownerID:        ownerID,
 		defaultAgentID: defaultAgentID,
@@ -244,7 +246,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sessionID := m.sessionID
 			agentID := m.defaultAgentID
 			cmds = append(cmds, func() tea.Msg {
-				err := m.backend.reply(context.Background(), sessionID, agentID, text)
+				err := m.backend.replyToSession(context.Background(), sessionID, agentID, text)
 				return replyDoneMsg{err: err}
 			})
 			return m, tea.Batch(cmds...)

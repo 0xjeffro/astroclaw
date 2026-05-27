@@ -16,6 +16,7 @@ var (
 
 type Session struct {
 	ID              string
+	WorkspaceID     string
 	UserID          string
 	Title           string
 	Model           string
@@ -38,6 +39,7 @@ func SessionFromDB(s db.AppChatSession) (*Session, error) {
 	}
 	return &Session{
 		ID:              s.ID,
+		WorkspaceID:     s.WorkspaceID,
 		UserID:          s.UserID,
 		Title:           s.Title,
 		Model:           s.Model,

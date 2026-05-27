@@ -26,6 +26,7 @@ type AppChatMessage struct {
 
 type AppChatSession struct {
 	ID              string
+	WorkspaceID     string
 	UserID          string
 	Title           string
 	Model           string

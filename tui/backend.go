@@ -78,9 +78,9 @@ func (b *backend) getSetting(ctx context.Context, name string) (string, error) {
 	return result.Value, nil
 }
 
-func (b *backend) newSession(ctx context.Context, userID string, agentIDs []string, title string) (*sessionInfo, error) {
+func (b *backend) createSessionInWorkspace(ctx context.Context, workspaceID, userID string, agentIDs []string, title string) (*sessionInfo, error) {
 	body, _ := json.Marshal(map[string]any{"user_id": userID, "agent_ids": agentIDs, "title": title})
-	resp, err := b.post(ctx, "/sessions", body)
+	resp, err := b.post(ctx, "/workspaces/"+workspaceID+"/sessions", body)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ func (b *backend) newSession(ctx context.Context, userID string, agentIDs []stri
 	return &s, nil
 }
 
-func (b *backend) listSessions(ctx context.Context) ([]sessionInfo, error) {
-	resp, err := b.get(ctx, "/sessions")
+func (b *backend) listSessionsInWorkspace(ctx context.Context, workspaceID string) ([]sessionInfo, error) {
+	resp, err := b.get(ctx, "/workspaces/"+workspaceID+"/sessions")
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func (b *backend) listSessions(ctx context.Context) ([]sessionInfo, error) {
 	return sessions, nil
 }
 
-func (b *backend) reply(ctx context.Context, sessionID, agentID, text string) error {
+func (b *backend) replyToSession(ctx context.Context, sessionID, agentID, text string) error {
 	body, _ := json.Marshal(map[string]string{"text": text, "agent_id": agentID})
 	_, err := b.postTo(ctx, b.replyURL, "/sessions/"+sessionID+"/reply", body)
 	return err

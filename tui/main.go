@@ -46,7 +46,7 @@ func main() {
 	}
 
 	// Create a default session.
-	session, err := backend.newSession(ctx, adminID, []string{defaultAgentID}, "default")
+	session, err := backend.createSessionInWorkspace(ctx, workspaceID, adminID, []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatalf("failed to create session: %v", err)
 	}
@@ -57,7 +57,7 @@ func main() {
 		log.Fatalf("failed to connect WebSocket: %v", err)
 	}
 
-	model := newModel(backend, ws, session.ID, adminID, defaultAgentID)
+	model := newModel(backend, ws, workspaceID, session.ID, adminID, defaultAgentID)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {

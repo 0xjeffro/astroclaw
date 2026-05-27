@@ -210,10 +210,11 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	// Extract session ID from path: /sessions/{id}/reply
 	path := req.RequestContext.HTTP.Path
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) < 3 || req.RequestContext.HTTP.Method != "POST" {
+	if len(parts) != 3 || parts[0] != "sessions" || parts[2] != "reply" || req.RequestContext.HTTP.Method != "POST" {
 		return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
 	}
 	sessionID := parts[1]
+	// TODO: authz — load session, verify caller has access to session.WorkspaceID.
 
 	var body struct {
 		Text    string `json:"text"`

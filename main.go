@@ -39,9 +39,9 @@ func newRemoteBackend(apiURL, replyURL, apiKey string) *remoteBackend {
 	}
 }
 
-func (r *remoteBackend) NewSession(ctx context.Context, userID string, agentIDs []string, title string) (*chat.Session, error) {
+func (r *remoteBackend) CreateSessionInWorkspace(ctx context.Context, workspaceID, userID string, agentIDs []string, title string) (*chat.Session, error) {
 	body, _ := json.Marshal(map[string]any{"user_id": userID, "agent_ids": agentIDs, "title": title})
-	resp, err := r.post(ctx, "/sessions", body)
+	resp, err := r.post(ctx, "/workspaces/"+workspaceID+"/sessions", body)
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +52,8 @@ func (r *remoteBackend) NewSession(ctx context.Context, userID string, agentIDs 
 	return &s, nil
 }
 
-func (r *remoteBackend) ListSessions(ctx context.Context) ([]*chat.Session, error) {
-	resp, err := r.get(ctx, "/sessions")
+func (r *remoteBackend) ListSessionsInWorkspace(ctx context.Context, workspaceID string) ([]*chat.Session, error) {
+	resp, err := r.get(ctx, "/workspaces/"+workspaceID+"/sessions")
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +64,8 @@ func (r *remoteBackend) ListSessions(ctx context.Context) ([]*chat.Session, erro
 	return sessions, nil
 }
 
-func (r *remoteBackend) GetSession(ctx context.Context, id string) (*chat.Session, error) {
-	resp, err := r.get(ctx, "/sessions/"+id)
+func (r *remoteBackend) GetSessionInWorkspace(ctx context.Context, workspaceID, id string) (*chat.Session, error) {
+	resp, err := r.get(ctx, "/workspaces/"+workspaceID+"/sessions/"+id)
 	if err != nil {
 		return nil, err
 	}
@@ -76,8 +76,8 @@ func (r *remoteBackend) GetSession(ctx context.Context, id string) (*chat.Sessio
 	return &s, nil
 }
 
-func (r *remoteBackend) SoftDeleteSession(ctx context.Context, id string) error {
-	req, err := http.NewRequestWithContext(ctx, "DELETE", r.apiURL+"/sessions/"+id, nil)
+func (r *remoteBackend) SoftDeleteSession(ctx context.Context, workspaceID, id string) error {
+	req, err := http.NewRequestWithContext(ctx, "DELETE", r.apiURL+"/workspaces/"+workspaceID+"/sessions/"+id, nil)
 	if err != nil {
 		return err
 	}
@@ -140,9 +140,9 @@ func (r *remoteBackend) GetSetting(ctx context.Context, name string) (string, er
 	return result.Value, nil
 }
 
-// Reply TODO: implement streaming for remote mode. Currently waits for the full
+// ReplyToSession Reply TODO: implement streaming for remote mode. Currently waits for the full
 // response before returning, so the user sees no output until it's complete.
-func (r *remoteBackend) Reply(ctx context.Context, sessionID, agentID, text string) (string, error) {
+func (r *remoteBackend) ReplyToSession(ctx context.Context, sessionID, agentID, text string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"text": text, "agent_id": agentID})
 	resp, err := r.postTo(ctx, r.replyURL, "/sessions/"+sessionID+"/reply", body)
 	if err != nil {
@@ -321,7 +321,7 @@ func main() {
 	}()
 
 	// Create a default session on startup with the admin and default agent.
-	defaultSession, err := backend.NewSession(ctx, adminID, []string{defaultAgentID}, "default")
+	defaultSession, err := backend.CreateSessionInWorkspace(ctx, workspaceID, adminID, []string{defaultAgentID}, "default")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func main() {
 			fmt.Println()
 			return
 		case input == "/sessions":
-			sessions, err := backend.ListSessions(ctx)
+			sessions, err := backend.ListSessionsInWorkspace(ctx, workspaceID)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
@@ -357,7 +357,7 @@ func main() {
 			if title == "" {
 				title = "untitled"
 			}
-			s, err := backend.NewSession(ctx, adminID, []string{defaultAgentID}, title)
+			s, err := backend.CreateSessionInWorkspace(ctx, workspaceID, adminID, []string{defaultAgentID}, title)
 			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
@@ -366,7 +366,7 @@ func main() {
 			fmt.Printf("Created and switched to session: %s (%s)\n", s.Title, s.ID)
 		case strings.HasPrefix(input, "/switch "):
 			id := strings.TrimSpace(strings.TrimPrefix(input, "/switch "))
-			if _, err := backend.GetSession(ctx, id); err != nil {
+			if _, err := backend.GetSessionInWorkspace(ctx, workspaceID, id); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
@@ -378,7 +378,7 @@ func main() {
 				_, _ = fmt.Fprintln(os.Stderr, "error: cannot delete the active session")
 				continue
 			}
-			if err := backend.SoftDeleteSession(ctx, id); err != nil {
+			if err := backend.SoftDeleteSession(ctx, workspaceID, id); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				continue
 			}
@@ -387,7 +387,7 @@ func main() {
 			continue
 		default:
 			go func() {
-				if _, err := backend.Reply(ctx, currentSession, defaultAgentID, input); err != nil {
+				if _, err := backend.ReplyToSession(ctx, currentSession, defaultAgentID, input); err != nil {
 					log.Printf("reply error: %v", err)
 					wsDone <- struct{}{}
 				}

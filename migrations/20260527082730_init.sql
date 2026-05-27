@@ -51,6 +51,7 @@ CREATE TABLE "public"."app_chat_session_members" (
 -- Create "app_chat_sessions" table
 CREATE TABLE "public"."app_chat_sessions" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "workspace_id" uuid NOT NULL,
   "user_id" uuid NOT NULL,
   "title" text NOT NULL DEFAULT '',
   "model" text NOT NULL DEFAULT '',
@@ -63,6 +64,8 @@ CREATE TABLE "public"."app_chat_sessions" (
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id")
 );
+-- Create index "idx_app_chat_sessions_workspace" to table: "app_chat_sessions"
+CREATE INDEX "idx_app_chat_sessions_workspace" ON "public"."app_chat_sessions" ("workspace_id");
 -- Create "app_notes_memories" table
 CREATE TABLE "public"."app_notes_memories" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),

@@ -110,6 +110,7 @@ func (f *fakeProvider) ChatStream(_ context.Context, msgs []provider.Message, _ 
 }
 
 const testUserID = "00000000-0000-0000-0000-000000000001"
+const testWorkspaceID = "00000000-0000-0000-0000-000000000003"
 
 // setupService creates a Service for testing using the shared testPool.
 // Cleans up data before each test to ensure isolation.
@@ -141,7 +142,7 @@ func TestReply_PersistsMessages(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, nil, "chat")
+	s, err := svc.CreateSessionInWorkspace(ctx, testWorkspaceID, testUserID, nil, "chat")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +164,7 @@ func TestReply_SavesContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, nil, "chat")
+	s, err := svc.CreateSessionInWorkspace(ctx, testWorkspaceID, testUserID, nil, "chat")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +189,7 @@ func TestReply_RestoresContext(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	s, err := svc.NewSession(ctx, testUserID, nil, "restored")
+	s, err := svc.CreateSessionInWorkspace(ctx, testWorkspaceID, testUserID, nil, "restored")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,8 +8,12 @@
 --   - PL/pgSQL (SQL-language functions only)
 --   - Multiple DDL statements per transaction
 
+-- A session belongs to exactly one workspace. All session members must be
+-- members of that workspace, and all session agents must be attached to it.
+-- TODO: enforce these invariants in the service layer.
 CREATE TABLE app_chat_sessions (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workspace_id     UUID NOT NULL,
     user_id          UUID NOT NULL,
     title            TEXT NOT NULL DEFAULT '',
     model            TEXT NOT NULL DEFAULT '',
@@ -21,6 +25,8 @@ CREATE TABLE app_chat_sessions (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at       TIMESTAMPTZ
 );
+
+CREATE INDEX idx_app_chat_sessions_workspace ON app_chat_sessions(workspace_id);
 
 CREATE TABLE app_chat_session_members (
     session_id UUID NOT NULL,

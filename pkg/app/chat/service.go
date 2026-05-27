@@ -32,13 +32,16 @@ func NewService(
 	}
 }
 
-// NewSession creates a session and writes the initial participants in one transaction.
+// CreateSessionInWorkspace NewSession creates a session and writes the initial participants in one transaction.
+//   - workspaceID: the workspace this session belongs to.
 //   - userID: the person creating the session, automatically added as "owner" in session_members.
 //   - agentIDs: all agents participating in this session, each added to session_agents.
 //
 // TODO: accept a memberIDs []string parameter for group chat, so the caller
 // can invite other users at creation time.
-func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []string, title string) (*Session, error) {
+// TODO: verify userID is a member of workspaceID and each agentID is attached
+// to workspaceID before inserting.
+func (svc *Service) CreateSessionInWorkspace(ctx context.Context, workspaceID, userID string, agentIDs []string, title string) (*Session, error) {
 	tx, err := svc.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -48,6 +51,7 @@ func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []st
 	qtx := svc.queries.WithTx(tx)
 
 	s, err := qtx.CreateSession(ctx, db.CreateSessionParams{
+		WorkspaceID:     workspaceID,
 		Title:           title,
 		UserID:          userID,
 		ContextMessages: "[]",
@@ -84,8 +88,8 @@ func (svc *Service) NewSession(ctx context.Context, userID string, agentIDs []st
 	return session, nil
 }
 
-func (svc *Service) ListSessions(ctx context.Context) ([]*Session, error) {
-	dbSessions, err := svc.queries.ListSessions(ctx)
+func (svc *Service) ListSessionsByWorkspace(ctx context.Context, workspaceID string) ([]*Session, error) {
+	dbSessions, err := svc.queries.ListSessionsByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
@@ -108,6 +112,7 @@ func (svc *Service) GetSession(ctx context.Context, id string) (*Session, error)
 	if err != nil {
 		return nil, fmt.Errorf("parse session: %w", err)
 	}
+	// TODO: workspace match check is deferred to the authz layer.
 	return session, nil
 }
 
@@ -129,6 +134,7 @@ func (svc *Service) ListSessionMembers(ctx context.Context, sessionID string) ([
 }
 
 func (svc *Service) SoftDeleteSession(ctx context.Context, id string) error {
+	// TODO: caller must verify workspace ownership via authz before calling.
 	return svc.queries.SoftDeleteSession(ctx, id)
 }
 
@@ -137,6 +143,7 @@ func (svc *Service) SoftDeleteSession(ctx context.Context, id string) error {
 // Persistence uses a database transaction: messages + context update either
 // both succeed or both roll back, preventing inconsistent state.
 func (svc *Service) Reply(ctx context.Context, sessionID string, agentID string, text string) (string, error) {
+	// TODO: caller must verify workspace ownership via authz before calling.
 	s, err := svc.GetSession(ctx, sessionID)
 	if err != nil {
 		return "", err
