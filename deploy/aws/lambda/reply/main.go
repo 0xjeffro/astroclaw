@@ -96,8 +96,19 @@ func init() {
 	skillsBucket := os.Getenv("SKILLS_BUCKET")
 
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
+		// TODO: read workspace_id from s.WorkspaceID once the chat session table
+		// carries it. For now, look it up via the session's user.
+		workspaces, err := systemSvc.ListWorkspacesForUser(context.Background(), s.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("list workspaces for user %q: %w", s.UserID, err)
+		}
+		if len(workspaces) == 0 {
+			return nil, fmt.Errorf("user %q has no workspace", s.UserID)
+		}
+		workspaceID := workspaces[0].ID
+
 		// Load agent profile dynamically per request.
-		agentProfile, err := agentsSvc.GetAgent(context.Background(), agentID)
+		agentProfile, err := agentsSvc.GetAgentFromWorkspace(context.Background(), workspaceID, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}

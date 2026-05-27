@@ -17,3 +17,9 @@ type AppAgentsProfile struct {
 	UpdatedAt time.Time
 	DeletedAt *time.Time
 }
+
+type AppAgentsWorkspace struct {
+	AgentID     string
+	WorkspaceID string
+	AttachedAt  time.Time
+}

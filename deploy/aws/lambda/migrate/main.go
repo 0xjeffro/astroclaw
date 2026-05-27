@@ -321,17 +321,34 @@ func seedDefaultWorkspace(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// seedDefaultAgent creates the genesis agent on first deploy if none exists.
-// This is the first agent created in the system, and is set as the default agent.
+// seedDefaultAgent creates the genesis agent in the default workspace on first
+// deploy if none exists. This is the first agent created in the system, and is
+// set as the default agent.
 func seedDefaultAgent(ctx context.Context, pool *pgxpool.Pool) error {
 	svc := agents.NewService(pool)
+	sysSvc := system.NewService(pool)
 
-	existing, err := svc.ListAgents(ctx)
+	// Find the default workspace (the admin's first workspace).
+	// Admin -> workspaces[0] -> workspaces[0].agents[]
+	admin, err := sysSvc.GetAdmin(ctx)
+	if err != nil {
+		return fmt.Errorf("get admin for agent seed: %w", err)
+	}
+	workspaces, err := sysSvc.ListWorkspacesForUser(ctx, admin.ID)
+	if err != nil {
+		return fmt.Errorf("list admin workspaces: %w", err)
+	}
+	if len(workspaces) == 0 {
+		return fmt.Errorf("admin has no workspace to seed agent into")
+	}
+	workspaceID := workspaces[0].ID
+
+	existing, err := svc.ListAgentsByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return fmt.Errorf("list agents: %w", err)
 	}
 	if len(existing) > 0 {
-		log.Printf("agents already exist, skipping seed")
+		log.Printf("agents already exist in workspace %s, skipping seed", workspaceID)
 		return nil
 	}
 
@@ -342,11 +359,11 @@ func seedDefaultAgent(ctx context.Context, pool *pgxpool.Pool) error {
 		"Be concise when needed, thorough when it matters."
 
 	// TODO: model should come from CDK parameter or environment variable or some other way instead of hardcoded.
-	a, err := svc.CreateAgent(ctx, "genesis", defaultSoul, "claude-sonnet-4-20250514")
+	a, err := svc.CreateAgent(ctx, workspaceID, "genesis", defaultSoul, "claude-sonnet-4-20250514")
 	if err != nil {
 		return fmt.Errorf("seed genesis agent: %w", err)
 	}
-	log.Printf("seeded genesis agent: %s (%s)", a.Name, a.ID)
+	log.Printf("seeded genesis agent: %s (%s) in workspace %s", a.Name, a.ID, workspaceID)
 
 	// Set the genesis agent as the default agent.
 	settingsSvc := settings.NewService(pool)

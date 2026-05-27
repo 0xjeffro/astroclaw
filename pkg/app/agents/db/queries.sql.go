@@ -9,20 +9,35 @@ import (
 	"context"
 )
 
-const createAgent = `-- name: CreateAgent :one
+const attachAgentToWorkspace = `-- name: AttachAgentToWorkspace :exec
+INSERT INTO app_agents_workspaces (agent_id, workspace_id)
+VALUES ($1, $2)
+`
+
+type AttachAgentToWorkspaceParams struct {
+	AgentID     string
+	WorkspaceID string
+}
+
+func (q *Queries) AttachAgentToWorkspace(ctx context.Context, arg AttachAgentToWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, attachAgentToWorkspace, arg.AgentID, arg.WorkspaceID)
+	return err
+}
+
+const createAgentProfile = `-- name: CreateAgentProfile :one
 INSERT INTO app_agents_profiles (name, soul, model)
 VALUES ($1, $2, $3)
 RETURNING id, name, soul, model, created_at, updated_at, deleted_at
 `
 
-type CreateAgentParams struct {
+type CreateAgentProfileParams struct {
 	Name  string
 	Soul  string
 	Model string
 }
 
-func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (AppAgentsProfile, error) {
-	row := q.db.QueryRow(ctx, createAgent, arg.Name, arg.Soul, arg.Model)
+func (q *Queries) CreateAgentProfile(ctx context.Context, arg CreateAgentProfileParams) (AppAgentsProfile, error) {
+	row := q.db.QueryRow(ctx, createAgentProfile, arg.Name, arg.Soul, arg.Model)
 	var i AppAgentsProfile
 	err := row.Scan(
 		&i.ID,
@@ -36,12 +51,35 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (AppAg
 	return i, err
 }
 
-const getAgent = `-- name: GetAgent :one
-SELECT id, name, soul, model, created_at, updated_at, deleted_at FROM app_agents_profiles WHERE id = $1 AND deleted_at IS NULL
+const detachAgentFromWorkspace = `-- name: DetachAgentFromWorkspace :exec
+DELETE FROM app_agents_workspaces
+WHERE agent_id = $1 AND workspace_id = $2
 `
 
-func (q *Queries) GetAgent(ctx context.Context, id string) (AppAgentsProfile, error) {
-	row := q.db.QueryRow(ctx, getAgent, id)
+type DetachAgentFromWorkspaceParams struct {
+	AgentID     string
+	WorkspaceID string
+}
+
+func (q *Queries) DetachAgentFromWorkspace(ctx context.Context, arg DetachAgentFromWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, detachAgentFromWorkspace, arg.AgentID, arg.WorkspaceID)
+	return err
+}
+
+const getAgentFromWorkspace = `-- name: GetAgentFromWorkspace :one
+SELECT p.id, p.name, p.soul, p.model, p.created_at, p.updated_at, p.deleted_at FROM app_agents_profiles p
+JOIN app_agents_workspaces aw ON aw.agent_id = p.id
+WHERE p.id = $1 AND aw.workspace_id = $2 AND p.deleted_at IS NULL
+`
+
+type GetAgentFromWorkspaceParams struct {
+	ID          string
+	WorkspaceID string
+}
+
+// Returns the agent only if it is attached to the given workspace.
+func (q *Queries) GetAgentFromWorkspace(ctx context.Context, arg GetAgentFromWorkspaceParams) (AppAgentsProfile, error) {
+	row := q.db.QueryRow(ctx, getAgentFromWorkspace, arg.ID, arg.WorkspaceID)
 	var i AppAgentsProfile
 	err := row.Scan(
 		&i.ID,
@@ -55,12 +93,15 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (AppAgentsProfile, er
 	return i, err
 }
 
-const listAgents = `-- name: ListAgents :many
-SELECT id, name, soul, model, created_at, updated_at, deleted_at FROM app_agents_profiles WHERE deleted_at IS NULL ORDER BY created_at
+const listAgentsByWorkspace = `-- name: ListAgentsByWorkspace :many
+SELECT p.id, p.name, p.soul, p.model, p.created_at, p.updated_at, p.deleted_at FROM app_agents_profiles p
+JOIN app_agents_workspaces aw ON aw.agent_id = p.id
+WHERE aw.workspace_id = $1 AND p.deleted_at IS NULL
+ORDER BY p.created_at
 `
 
-func (q *Queries) ListAgents(ctx context.Context) ([]AppAgentsProfile, error) {
-	rows, err := q.db.Query(ctx, listAgents)
+func (q *Queries) ListAgentsByWorkspace(ctx context.Context, workspaceID string) ([]AppAgentsProfile, error) {
+	rows, err := q.db.Query(ctx, listAgentsByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +128,36 @@ func (q *Queries) ListAgents(ctx context.Context) ([]AppAgentsProfile, error) {
 	return items, nil
 }
 
+const listWorkspacesForAgent = `-- name: ListWorkspacesForAgent :many
+SELECT workspace_id FROM app_agents_workspaces
+WHERE agent_id = $1
+ORDER BY attached_at
+`
+
+func (q *Queries) ListWorkspacesForAgent(ctx context.Context, agentID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listWorkspacesForAgent, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var workspace_id string
+		if err := rows.Scan(&workspace_id); err != nil {
+			return nil, err
+		}
+		items = append(items, workspace_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteAgent = `-- name: SoftDeleteAgent :exec
-UPDATE app_agents_profiles SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
+UPDATE app_agents_profiles
+SET deleted_at = now()
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) SoftDeleteAgent(ctx context.Context, id string) error {

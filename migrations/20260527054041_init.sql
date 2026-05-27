@@ -9,6 +9,13 @@ CREATE TABLE "public"."app_agents_profiles" (
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id")
 );
+-- Create "app_agents_workspaces" table
+CREATE TABLE "public"."app_agents_workspaces" (
+  "agent_id" uuid NOT NULL,
+  "workspace_id" uuid NOT NULL,
+  "attached_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("agent_id", "workspace_id")
+);
 -- Create "app_chat_messages" table
 CREATE TABLE "public"."app_chat_messages" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
