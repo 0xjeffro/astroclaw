@@ -8,6 +8,14 @@ on:
       - 'migrations/**'
       - '.github/scripts/check-atlas-registry.sh'
       - '.github/workflows/atlas-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pkg/app/**/db/schema.sql'
+      - 'atlas.hcl'
+      - 'migrations/**'
+      - '.github/scripts/check-atlas-registry.sh'
+      - '.github/workflows/atlas-check.yml'
 
 jobs:
   registry:
