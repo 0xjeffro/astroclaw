@@ -8,15 +8,16 @@ import (
 
 // MemoryStore is the interface that MemorySaveTool needs to persist memories.
 type MemoryStore interface {
-	SaveMemory(ctx context.Context, agentID, content, sessionID string, messageIDs []string) error
+	SaveMemory(ctx context.Context, agentID, userID, content, sessionID string, messageIDs []string) error
 }
 
 // MemorySaveTool saves durable facts to persistent memory.
-// The store, agentID, and sessionID are injected when the tool is created,
-// typically per-session when building the Agent.
+// The store, agentID, userID, and sessionID are injected when the tool is
+// created, typically per-session when building the Agent.
 type MemorySaveTool struct {
 	Store     MemoryStore
 	AgentID   string
+	UserID    string
 	SessionID string
 }
 
@@ -50,7 +51,7 @@ func (t *MemorySaveTool) Execute(ctx context.Context, args string) (string, erro
 	if p.Content == "" {
 		return "", fmt.Errorf("content cannot be empty")
 	}
-	if err := t.Store.SaveMemory(ctx, t.AgentID, p.Content, t.SessionID, nil); err != nil {
+	if err := t.Store.SaveMemory(ctx, t.AgentID, t.UserID, p.Content, t.SessionID, nil); err != nil {
 		return "", fmt.Errorf("save memory: %w", err)
 	}
 	return "memory saved", nil

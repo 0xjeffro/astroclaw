@@ -113,7 +113,7 @@ func init() {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
 
-		systemPrompt := buildPrompt(context.Background(), agentProfile, settingsSvc, notesSvc, skillsSvc)
+		systemPrompt := buildPrompt(context.Background(), agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
 
 		registry := tool.NewRegistry()
 		registry.Register(&tool.TimeTool{})
@@ -127,6 +127,7 @@ func init() {
 		registry.Register(&tool.MemorySaveTool{
 			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
 			AgentID:   agentID,
+			UserID:    s.UserID,
 			SessionID: s.ID,
 		})
 		registry.Register(&websearch.Tool{
@@ -187,13 +188,13 @@ func init() {
 	svc = chat.NewService(pool, createFn)
 }
 
-func buildPrompt(ctx context.Context, agentProfile *agents.Agent, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
+func buildPrompt(ctx context.Context, agentProfile *agents.Agent, userID string, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
 	var cfg agent.PromptConfig
 	cfg.Soul = agentProfile.Soul
 	if user, err := settingsSvc.GetKVSetting(ctx, settings.SettingUserProfile); err == nil {
 		cfg.User = user.Value
 	}
-	if memories, err := notesSvc.FormatForPrompt(ctx, agentProfile.ID, agent.DefaultCharLimits().Memories); err == nil {
+	if memories, err := notesSvc.FormatUserMemoryForPrompt(ctx, agentProfile.ID, userID, agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
 	}
 	if skillList, err := skillsSvc.ListSkills(ctx); err == nil {

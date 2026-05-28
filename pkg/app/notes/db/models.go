@@ -11,6 +11,7 @@ import (
 type AppNotesMemory struct {
 	ID        string
 	AgentID   string
+	UserID    string
 	Content   string
 	SessionID string
 	CreatedAt time.Time

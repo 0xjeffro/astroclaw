@@ -24,24 +24,31 @@ func (q *Queries) AddMemorySource(ctx context.Context, arg AddMemorySourceParams
 	return err
 }
 
-const createMemory = `-- name: CreateMemory :one
-INSERT INTO app_notes_memories (agent_id, content, session_id)
-VALUES ($1, $2, $3)
-RETURNING id, agent_id, content, session_id, created_at
+const createMemoryForUser = `-- name: CreateMemoryForUser :one
+INSERT INTO app_notes_memories (agent_id, user_id, content, session_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, agent_id, user_id, content, session_id, created_at
 `
 
-type CreateMemoryParams struct {
+type CreateMemoryForUserParams struct {
 	AgentID   string
+	UserID    string
 	Content   string
 	SessionID string
 }
 
-func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (AppNotesMemory, error) {
-	row := q.db.QueryRow(ctx, createMemory, arg.AgentID, arg.Content, arg.SessionID)
+func (q *Queries) CreateMemoryForUser(ctx context.Context, arg CreateMemoryForUserParams) (AppNotesMemory, error) {
+	row := q.db.QueryRow(ctx, createMemoryForUser,
+		arg.AgentID,
+		arg.UserID,
+		arg.Content,
+		arg.SessionID,
+	)
 	var i AppNotesMemory
 	err := row.Scan(
 		&i.ID,
 		&i.AgentID,
+		&i.UserID,
 		&i.Content,
 		&i.SessionID,
 		&i.CreatedAt,
@@ -50,7 +57,7 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (App
 }
 
 const getMemory = `-- name: GetMemory :one
-SELECT id, agent_id, content, session_id, created_at FROM app_notes_memories WHERE id = $1
+SELECT id, agent_id, user_id, content, session_id, created_at FROM app_notes_memories WHERE id = $1
 `
 
 func (q *Queries) GetMemory(ctx context.Context, id string) (AppNotesMemory, error) {
@@ -59,6 +66,7 @@ func (q *Queries) GetMemory(ctx context.Context, id string) (AppNotesMemory, err
 	err := row.Scan(
 		&i.ID,
 		&i.AgentID,
+		&i.UserID,
 		&i.Content,
 		&i.SessionID,
 		&i.CreatedAt,
@@ -90,12 +98,19 @@ func (q *Queries) GetMemorySources(ctx context.Context, memoryID string) ([]stri
 	return items, nil
 }
 
-const listMemories = `-- name: ListMemories :many
-SELECT id, agent_id, content, session_id, created_at FROM app_notes_memories WHERE agent_id = $1 ORDER BY created_at DESC
+const listMemoriesByAgentAndUser = `-- name: ListMemoriesByAgentAndUser :many
+SELECT id, agent_id, user_id, content, session_id, created_at FROM app_notes_memories
+WHERE agent_id = $1 AND user_id = $2
+ORDER BY created_at DESC
 `
 
-func (q *Queries) ListMemories(ctx context.Context, agentID string) ([]AppNotesMemory, error) {
-	rows, err := q.db.Query(ctx, listMemories, agentID)
+type ListMemoriesByAgentAndUserParams struct {
+	AgentID string
+	UserID  string
+}
+
+func (q *Queries) ListMemoriesByAgentAndUser(ctx context.Context, arg ListMemoriesByAgentAndUserParams) ([]AppNotesMemory, error) {
+	rows, err := q.db.Query(ctx, listMemoriesByAgentAndUser, arg.AgentID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +121,7 @@ func (q *Queries) ListMemories(ctx context.Context, agentID string) ([]AppNotesM
 		if err := rows.Scan(
 			&i.ID,
 			&i.AgentID,
+			&i.UserID,
 			&i.Content,
 			&i.SessionID,
 			&i.CreatedAt,
@@ -120,17 +136,21 @@ func (q *Queries) ListMemories(ctx context.Context, agentID string) ([]AppNotesM
 	return items, nil
 }
 
-const listRecentMemories = `-- name: ListRecentMemories :many
-SELECT id, agent_id, content, session_id, created_at FROM app_notes_memories WHERE agent_id = $1 ORDER BY created_at DESC LIMIT $2
+const listRecentMemoriesByAgentAndUser = `-- name: ListRecentMemoriesByAgentAndUser :many
+SELECT id, agent_id, user_id, content, session_id, created_at FROM app_notes_memories
+WHERE agent_id = $1 AND user_id = $2
+ORDER BY created_at DESC
+LIMIT $3
 `
 
-type ListRecentMemoriesParams struct {
+type ListRecentMemoriesByAgentAndUserParams struct {
 	AgentID string
+	UserID  string
 	Limit   int32
 }
 
-func (q *Queries) ListRecentMemories(ctx context.Context, arg ListRecentMemoriesParams) ([]AppNotesMemory, error) {
-	rows, err := q.db.Query(ctx, listRecentMemories, arg.AgentID, arg.Limit)
+func (q *Queries) ListRecentMemoriesByAgentAndUser(ctx context.Context, arg ListRecentMemoriesByAgentAndUserParams) ([]AppNotesMemory, error) {
+	rows, err := q.db.Query(ctx, listRecentMemoriesByAgentAndUser, arg.AgentID, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +161,7 @@ func (q *Queries) ListRecentMemories(ctx context.Context, arg ListRecentMemories
 		if err := rows.Scan(
 			&i.ID,
 			&i.AgentID,
+			&i.UserID,
 			&i.Content,
 			&i.SessionID,
 			&i.CreatedAt,

@@ -14,7 +14,7 @@ type fakeMemoryStore struct {
 	shouldErr bool
 }
 
-func (f *fakeMemoryStore) SaveMemory(_ context.Context, agentID, content, sessionID string, messageIDs []string) error {
+func (f *fakeMemoryStore) SaveMemory(_ context.Context, agentID, userID, content, sessionID string, messageIDs []string) error {
 	if f.shouldErr {
 		return fmt.Errorf("store error")
 	}

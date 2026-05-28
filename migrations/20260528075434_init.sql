@@ -70,11 +70,14 @@ CREATE INDEX "idx_app_chat_sessions_workspace" ON "public"."app_chat_sessions" (
 CREATE TABLE "public"."app_notes_memories" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "agent_id" uuid NOT NULL,
+  "user_id" uuid NOT NULL,
   "content" text NOT NULL,
   "session_id" uuid NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("id")
 );
+-- Create index "idx_app_notes_memories_agent_user" to table: "app_notes_memories"
+CREATE INDEX "idx_app_notes_memories_agent_user" ON "public"."app_notes_memories" ("agent_id", "user_id");
 -- Create "app_notes_memory_sources" table
 CREATE TABLE "public"."app_notes_memory_sources" (
   "memory_id" uuid NOT NULL,
