@@ -40,20 +40,34 @@ func (t *MemorySaveTool) Parameters() map[string]any {
 		"required": []string{"content"},
 	}
 }
-func (t *MemorySaveTool) Execute(ctx context.Context, args string) (string, error) {
+func (t *MemorySaveTool) Execute(ctx context.Context, args string) *ToolResult {
 	var p struct {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("bad args: %s", err),
+			Err:     err,
+		}
 	}
 	if p.Content == "" {
-		return "", fmt.Errorf("content cannot be empty")
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  "content cannot be empty",
+			Err:     fmt.Errorf("content cannot be empty"),
+		}
 	}
 	if err := t.Store.SaveMemory(ctx, t.AgentID, p.Content, t.SessionID, nil); err != nil {
-		return "", fmt.Errorf("save memory: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("save memory: %s", err),
+			Err:     err,
+		}
 	}
-	return "memory saved", nil
+	return &ToolResult{
+		ForLLM: "memory saved",
+	}
 }
 func (t *MemorySaveTool) Approval() bool  { return false }
 func (t *MemorySaveTool) Workspace() bool { return false }

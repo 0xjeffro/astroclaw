@@ -2,12 +2,19 @@ package tool
 
 import "context"
 
+type ToolResult struct {
+	ForLLM string // content appended to LLM context as tool result
+	ForUser string // content shown to the user
+	IsError bool // whether this result represents a failure
+	Err error // internal error for logging
+}
+
 // Tool is the interface that all tools must implement.
 type Tool interface {
 	Name() string
 	Description() string
 	Parameters() map[string]any
-	Execute(ctx context.Context, args string) (string, error)
+	Execute(ctx context.Context, args string) *ToolResult
 	Approval() bool  // if true, the agent must ask the user before executing
 	Workspace() bool // needs filesystem/shell environment (EC2), otherwise runs serverless (Lambda)
 }

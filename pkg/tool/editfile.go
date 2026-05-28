@@ -38,32 +38,54 @@ func (t *EditFileTool) Parameters() map[string]any {
 		"required": []string{"path", "old_text", "new_text"},
 	}
 }
-func (t *EditFileTool) Execute(_ context.Context, args string) (string, error) {
+func (t *EditFileTool) Execute(_ context.Context, args string) *ToolResult {
 	var p struct {
 		Path    string `json:"path"`
 		OldText string `json:"old_text"`
 		NewText string `json:"new_text"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("bad args: %s", err),
+			Err:     err,
+		}
 	}
 	data, err := os.ReadFile(p.Path)
 	if err != nil {
-		return "", fmt.Errorf("read file: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("read file: %s", err),
+			Err:     err,
+		}
 	}
 	content := string(data)
 	if !strings.Contains(content, p.OldText) {
-		return "", fmt.Errorf("old_text not found in file. Make sure it matches exactly")
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  "old_text not found in file. Make sure it matches exactly",
+			Err:     fmt.Errorf("old_text not found in file"),
+		}
 	}
 	count := strings.Count(content, p.OldText)
 	if count > 1 {
-		return "", fmt.Errorf("old_text appears %d times. Provide more context to make it unique", count)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("old_text appears %d times. Provide more context to make it unique", count),
+			Err:     fmt.Errorf("old_text appears %d times", count),
+		}
 	}
 	newContent := strings.Replace(content, p.OldText, p.NewText, 1)
 	if err := os.WriteFile(p.Path, []byte(newContent), 0o644); err != nil {
-		return "", fmt.Errorf("write file: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("write file: %s", err),
+			Err:     err,
+		}
 	}
-	return fmt.Sprintf("edited %s", p.Path), nil
+	return &ToolResult{
+		ForLLM: fmt.Sprintf("edited %s", p.Path),
+	}
 }
 func (t *EditFileTool) Approval() bool  { return true }
 func (t *EditFileTool) Workspace() bool { return true }

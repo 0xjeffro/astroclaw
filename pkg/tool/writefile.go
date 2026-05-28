@@ -35,29 +35,47 @@ func (t *WriteFileTool) Parameters() map[string]any {
 		"required": []string{"path", "content"},
 	}
 }
-func (t *WriteFileTool) Execute(_ context.Context, args string) (string, error) {
+func (t *WriteFileTool) Execute(_ context.Context, args string) *ToolResult {
 	var p struct {
 		Path      string `json:"path"`
 		Content   string `json:"content"`
 		Overwrite bool   `json:"overwrite"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("bad args: %s", err),
+			Err:     err,
+		}
 	}
 	if !p.Overwrite {
 		if _, err := os.Stat(p.Path); err == nil {
-			return "", fmt.Errorf("file %s already exists, set overwrite=true to replace", p.Path)
+			return &ToolResult{
+				IsError: true,
+				ForLLM:  fmt.Sprintf("file %s already exists, set overwrite=true to replace", p.Path),
+				Err:     fmt.Errorf("file %s already exists", p.Path),
+			}
 		}
 	}
 	if dir := filepath.Dir(p.Path); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("create directory: %w", err)
+			return &ToolResult{
+				IsError: true,
+				ForLLM:  fmt.Sprintf("create directory: %s", err),
+				Err:     err,
+			}
 		}
 	}
 	if err := os.WriteFile(p.Path, []byte(p.Content), 0o644); err != nil {
-		return "", fmt.Errorf("write file: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("write file: %s", err),
+			Err:     err,
+		}
 	}
-	return fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path), nil
+	return &ToolResult{
+		ForLLM: fmt.Sprintf("wrote %d bytes to %s", len(p.Content), p.Path),
+	}
 }
 func (t *WriteFileTool) Approval() bool  { return true }
 func (t *WriteFileTool) Workspace() bool { return true }

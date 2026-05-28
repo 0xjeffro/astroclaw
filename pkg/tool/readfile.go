@@ -46,19 +46,31 @@ func (t *ReadFileTool) Parameters() map[string]any {
 		"required": []string{"path"},
 	}
 }
-func (t *ReadFileTool) Execute(_ context.Context, args string) (string, error) {
+func (t *ReadFileTool) Execute(_ context.Context, args string) *ToolResult {
 	var p struct {
 		Path string `json:"path"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", fmt.Errorf("bad args: %w", err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("bad args: %s", err),
+			Err:     err,
+		}
 	}
 	data, err := os.ReadFile(p.Path)
 	if err != nil {
-		return "", fmt.Errorf("read file %s: %w", p.Path, err)
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  fmt.Sprintf("read file %s: %s", p.Path, err),
+			Err:     err,
+		}
 	}
 	if bytes.Contains(data, []byte{0}) {
-		return "", fmt.Errorf("binary file, cannot read as text")
+		return &ToolResult{
+			IsError: true,
+			ForLLM:  "binary file, cannot read as text",
+			Err:     fmt.Errorf("binary file, cannot read as text"),
+		}
 	}
 	text := string(data)
 	lines := strings.Split(text, "\n")
@@ -75,7 +87,7 @@ func (t *ReadFileTool) Execute(_ context.Context, args string) (string, error) {
 		// Check line limit.
 		if lineCount >= maxReadLines {
 			b.WriteString(fmt.Sprintf("\n[TRUNCATED: exceeded %d lines]", maxReadLines))
-			return b.String(), nil
+			return &ToolResult{ForLLM: b.String()}
 		}
 
 		// Check byte limit. Truncate at UTF-8 boundary if mid-line.
@@ -86,13 +98,13 @@ func (t *ReadFileTool) Execute(_ context.Context, args string) (string, error) {
 				b.WriteString(truncateAtUTF8(line, remaining))
 			}
 			b.WriteString(fmt.Sprintf("\n[TRUNCATED: exceeded %d bytes]", maxReadBytes))
-			return b.String(), nil
+			return &ToolResult{ForLLM: b.String()}
 		}
 
 		b.WriteString(entry)
 		lineCount++
 	}
-	return strings.TrimSuffix(b.String(), "\n"), nil
+	return &ToolResult{ForLLM: strings.TrimSuffix(b.String(), "\n")}
 }
 func (t *ReadFileTool) Approval() bool  { return false }
 func (t *ReadFileTool) Workspace() bool { return true }
