@@ -1,10 +1,10 @@
 // TODO: add a CI workflow (.github/workflows/atlas-check.yml) that runs
-// `atlas migrate diff --env local` on every PR and `git diff --exit-code`
+// [Done] `atlas migrate diff --env local` on every PR and `git diff --exit-code`
 // to ensure schema changes have a corresponding migration file committed.
 // Register the job as a required status check in branch protection so a PR
 // can't merge with schema changes but no matching migration.
 //
-// Also add a registry check: a script that scans pkg/app/*/db/schema.sql and
+// [Done] Also add a registry check: a script that scans pkg/app/*/db/schema.sql and
 // verifies every file appears in the src list below. Otherwise a brand-new
 // app is silently skipped (atlas migrate diff sees no change, git diff passes).
 //

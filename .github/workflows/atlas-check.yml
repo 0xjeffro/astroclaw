@@ -1,0 +1,38 @@
+name: atlas-check
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/app/**/db/schema.sql'
+      - 'atlas.hcl'
+      - 'migrations/**'
+      - '.github/scripts/check-atlas-registry.sh'
+      - '.github/workflows/atlas-check.yml'
+
+jobs:
+  registry:
+    name: schema registered in atlas.hcl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-atlas-registry.sh
+
+  migrate-diff:
+    name: atlas migrate diff is up to date
+    runs-on: ubuntu-latest
+    needs: registry
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ariga/setup-atlas@master
+
+      - name: run atlas migrate diff
+        run: atlas migrate diff ci_check --env local
+
+      - name: ensure no uncommitted migration
+        run: |
+          if ! git diff --exit-code migrations/; then
+            echo "::error::Schema changed but the corresponding migration file is missing."
+            echo "Run 'atlas migrate diff <name> --env local' locally and commit the generated file."
+            exit 1
+          fi
