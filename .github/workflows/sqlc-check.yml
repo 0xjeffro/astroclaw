@@ -1,0 +1,49 @@
+name: sqlc-check
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/app/**/db/schema.sql'
+      - 'pkg/app/**/db/queries.sql'
+      - 'pkg/app/**/db/*.go'
+      - 'sqlc.yaml'
+      - '.github/scripts/check-sqlc-registry.sh'
+      - '.github/workflows/sqlc-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pkg/app/**/db/schema.sql'
+      - 'pkg/app/**/db/queries.sql'
+      - 'pkg/app/**/db/*.go'
+      - 'sqlc.yaml'
+      - '.github/scripts/check-sqlc-registry.sh'
+      - '.github/workflows/sqlc-check.yml'
+
+jobs:
+  registry:
+    name: schema registered in sqlc.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-sqlc-registry.sh
+
+  generate:
+    name: sqlc generate is up to date
+    runs-on: ubuntu-latest
+    needs: registry
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: '1.30.0'
+
+      - name: run sqlc generate
+        run: sqlc generate
+
+      - name: ensure no uncommitted generated code
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::sqlc generate produced changes. Run it locally and commit the regenerated files."
+            exit 1
+          fi

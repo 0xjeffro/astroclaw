@@ -1,11 +1,11 @@
 version: "2"
 # TODO: add a CI workflow (.github/workflows/sqlc-check.yml) that runs
-# `sqlc generate` and then `git diff --exit-code` on every PR, and register
+# [Done]`sqlc generate` and then `git diff --exit-code` on every PR, and register
 # the job as a required status check in branch protection. This ensures
 # that any schema/queries change is regenerated and committed before merge,
 # and indirectly catches missing type overrides via the follow-up `go build`.
 #
-# Also add a registry check: a script that scans pkg/app/*/db/schema.sql and
+# [Done]Also add a registry check: a script that scans pkg/app/*/db/schema.sql and
 # verifies every file is registered in this sqlc.yaml. Otherwise a brand-new
 # app is silently skipped (sqlc generate does nothing, git diff passes).
 #
