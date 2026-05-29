@@ -9,13 +9,13 @@ import (
 )
 
 type AppSkill struct {
-	ID          string
+	WorkspaceID string
 	Author      string
 	Name        string
+	Version     string
 	Description string
 	WhenToUse   string
 	Tags        string
-	Version     string
-	CreatedAt   time.Time
+	InstalledAt time.Time
 	UpdatedAt   time.Time
 }

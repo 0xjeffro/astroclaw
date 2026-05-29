@@ -14,10 +14,19 @@ import (
 
 // Tool implements the load_skill tool that agents use to load skill content.
 type Tool struct {
-	Skills   *appskills.Service
-	S3Client *s3.Client
-	Bucket   string
+	Skills      *appskills.Service
+	S3Client    *s3.Client
+	Bucket      string
+	WorkspaceID string
 }
+
+// TODO: Go's named struct literals silently zero-initialize omitted fields,
+// so a required field like WorkspaceID can be forgotten at construction
+// without any build error. For example, when reply Lambda's createFn builds
+// this struct, leaving out WorkspaceID compiles fine but breaks every
+// load_skill call at runtime ("skill not found").
+// Plan: replace exported fields with a New(...) constructor that forces all
+// required fields to be passed explicitly, and unexport the struct fields.
 
 func (t *Tool) Name() string { return "load_skill" }
 
@@ -70,16 +79,16 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 		return "error: name is required", nil
 	}
 
-	// Verify skill exists in DB.
-	skill, err := t.Skills.GetSkillByName(ctx, author, name)
+	// Verify skill exists in this workspace.
+	skill, err := t.Skills.GetSkillFromWorkspace(ctx, t.WorkspaceID, author, name)
 	if err != nil {
-		return fmt.Sprintf("error: skill %s/%s not found", author, name), nil
+		return fmt.Sprintf("error: skill %s/%s not found in workspace %s", author, name, t.WorkspaceID), nil
 	}
 
 	// If a specific file is requested, read just that file.
 	file := strings.TrimSpace(parsed.File)
 	if file != "" {
-		content, err := t.readS3File(ctx, author, name, file)
+		content, err := t.readS3File(ctx, author, name, skill.Version, file)
 		if err != nil {
 			return fmt.Sprintf("error: could not read %s: %v", file, err), nil
 		}
@@ -87,19 +96,19 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	}
 
 	// Default: return SKILL.md content + file listing.
-	skillMD, err := t.readS3File(ctx, author, name, "SKILL.md")
+	skillMD, err := t.readS3File(ctx, author, name, skill.Version, "SKILL.md")
 	if err != nil {
 		return fmt.Sprintf("error: could not read SKILL.md: %v", err), nil
 	}
 
 	// List all files in the skill directory.
-	files, err := t.listS3Files(ctx, author, name)
+	files, err := t.listS3Files(ctx, author, name, skill.Version)
 	if err != nil {
 		return fmt.Sprintf("error: could not list files: %v", err), nil
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("[Skill: %s/%s]\n\n", skill.Author, skill.Name))
+	b.WriteString(fmt.Sprintf("[Skill: %s/%s Version: %s]\n\n", skill.Author, skill.Name, skill.Version))
 	b.WriteString(skillMD)
 
 	// Show supporting files if any exist beyond SKILL.md.
@@ -119,10 +128,10 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 // TODO: abstract S3 calls behind a storage interface for multi-cloud support.
 // TODO: add a size limit (io.LimitReader) so a huge file doesn't eat all Lambda memory.
 // https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#Client.GetObject
-func (t *Tool) readS3File(ctx context.Context, author, name, file string) (string, error) {
+func (t *Tool) readS3File(ctx context.Context, author, name, version, file string) (string, error) {
 	resp, err := t.S3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: &t.Bucket,
-		Key:    new(fmt.Sprintf("skills/%s/%s/%s", author, name, file)),
+		Key:    new(fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, file)),
 	})
 	if err != nil {
 		return "", err
@@ -140,8 +149,8 @@ func (t *Tool) readS3File(ctx context.Context, author, name, file string) (strin
 // TODO: this only returns the first 1000 files. Fine for skills (they're small),
 // but should use a paginator if skills ever get that big.
 // https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#Client.ListObjectsV2
-func (t *Tool) listS3Files(ctx context.Context, author, name string) ([]string, error) {
-	prefix := fmt.Sprintf("skills/%s/%s/", author, name)
+func (t *Tool) listS3Files(ctx context.Context, author, name, version string) ([]string, error) {
+	prefix := fmt.Sprintf("skills/%s/%s/%s/", author, name, version)
 	resp, err := t.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket: &t.Bucket,
 		Prefix: &prefix,

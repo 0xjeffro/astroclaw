@@ -9,107 +9,83 @@ import (
 	"context"
 )
 
-const createSkill = `-- name: CreateSkill :one
-INSERT INTO app_skills (author, name, description, when_to_use, tags, version)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, author, name, description, when_to_use, tags, version, created_at, updated_at
+const getSkillFromWorkspace = `-- name: GetSkillFromWorkspace :one
+SELECT workspace_id, author, name, version, description, when_to_use, tags, installed_at, updated_at FROM app_skills
+WHERE workspace_id = $1 AND author = $2 AND name = $3
 `
 
-type CreateSkillParams struct {
+type GetSkillFromWorkspaceParams struct {
+	WorkspaceID string
 	Author      string
 	Name        string
+}
+
+func (q *Queries) GetSkillFromWorkspace(ctx context.Context, arg GetSkillFromWorkspaceParams) (AppSkill, error) {
+	row := q.db.QueryRow(ctx, getSkillFromWorkspace, arg.WorkspaceID, arg.Author, arg.Name)
+	var i AppSkill
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Author,
+		&i.Name,
+		&i.Version,
+		&i.Description,
+		&i.WhenToUse,
+		&i.Tags,
+		&i.InstalledAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const installSkill = `-- name: InstallSkill :one
+INSERT INTO app_skills (workspace_id, author, name, version, description, when_to_use, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING workspace_id, author, name, version, description, when_to_use, tags, installed_at, updated_at
+`
+
+type InstallSkillParams struct {
+	WorkspaceID string
+	Author      string
+	Name        string
+	Version     string
 	Description string
 	WhenToUse   string
 	Tags        string
-	Version     string
 }
 
-func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (AppSkill, error) {
-	row := q.db.QueryRow(ctx, createSkill,
+func (q *Queries) InstallSkill(ctx context.Context, arg InstallSkillParams) (AppSkill, error) {
+	row := q.db.QueryRow(ctx, installSkill,
+		arg.WorkspaceID,
 		arg.Author,
 		arg.Name,
+		arg.Version,
 		arg.Description,
 		arg.WhenToUse,
 		arg.Tags,
-		arg.Version,
 	)
 	var i AppSkill
 	err := row.Scan(
-		&i.ID,
+		&i.WorkspaceID,
 		&i.Author,
 		&i.Name,
+		&i.Version,
 		&i.Description,
 		&i.WhenToUse,
 		&i.Tags,
-		&i.Version,
-		&i.CreatedAt,
+		&i.InstalledAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const deleteSkill = `-- name: DeleteSkill :exec
-DELETE FROM app_skills WHERE id = $1
+const listSkillsByWorkspace = `-- name: ListSkillsByWorkspace :many
+SELECT workspace_id, author, name, version, description, when_to_use, tags, installed_at, updated_at FROM app_skills
+WHERE workspace_id = $1
+ORDER BY author, name
 `
 
-func (q *Queries) DeleteSkill(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, deleteSkill, id)
-	return err
-}
-
-const getSkill = `-- name: GetSkill :one
-SELECT id, author, name, description, when_to_use, tags, version, created_at, updated_at FROM app_skills WHERE id = $1
-`
-
-func (q *Queries) GetSkill(ctx context.Context, id string) (AppSkill, error) {
-	row := q.db.QueryRow(ctx, getSkill, id)
-	var i AppSkill
-	err := row.Scan(
-		&i.ID,
-		&i.Author,
-		&i.Name,
-		&i.Description,
-		&i.WhenToUse,
-		&i.Tags,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getSkillByName = `-- name: GetSkillByName :one
-SELECT id, author, name, description, when_to_use, tags, version, created_at, updated_at FROM app_skills WHERE author = $1 AND name = $2
-`
-
-type GetSkillByNameParams struct {
-	Author string
-	Name   string
-}
-
-func (q *Queries) GetSkillByName(ctx context.Context, arg GetSkillByNameParams) (AppSkill, error) {
-	row := q.db.QueryRow(ctx, getSkillByName, arg.Author, arg.Name)
-	var i AppSkill
-	err := row.Scan(
-		&i.ID,
-		&i.Author,
-		&i.Name,
-		&i.Description,
-		&i.WhenToUse,
-		&i.Tags,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listSkills = `-- name: ListSkills :many
-SELECT id, author, name, description, when_to_use, tags, version, created_at, updated_at FROM app_skills ORDER BY author, name
-`
-
-func (q *Queries) ListSkills(ctx context.Context) ([]AppSkill, error) {
-	rows, err := q.db.Query(ctx, listSkills)
+func (q *Queries) ListSkillsByWorkspace(ctx context.Context, workspaceID string) ([]AppSkill, error) {
+	rows, err := q.db.Query(ctx, listSkillsByWorkspace, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,14 +94,14 @@ func (q *Queries) ListSkills(ctx context.Context) ([]AppSkill, error) {
 	for rows.Next() {
 		var i AppSkill
 		if err := rows.Scan(
-			&i.ID,
+			&i.WorkspaceID,
 			&i.Author,
 			&i.Name,
+			&i.Version,
 			&i.Description,
 			&i.WhenToUse,
 			&i.Tags,
-			&i.Version,
-			&i.CreatedAt,
+			&i.InstalledAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -138,27 +114,47 @@ func (q *Queries) ListSkills(ctx context.Context) ([]AppSkill, error) {
 	return items, nil
 }
 
-const updateSkill = `-- name: UpdateSkill :exec
-UPDATE app_skills
-SET description = $1, when_to_use = $2, tags = $3, version = $4, updated_at = now()
-WHERE id = $5
+const uninstallSkillInWorkspace = `-- name: UninstallSkillInWorkspace :exec
+DELETE FROM app_skills
+WHERE workspace_id = $1 AND author = $2 AND name = $3
 `
 
-type UpdateSkillParams struct {
+type UninstallSkillInWorkspaceParams struct {
+	WorkspaceID string
+	Author      string
+	Name        string
+}
+
+func (q *Queries) UninstallSkillInWorkspace(ctx context.Context, arg UninstallSkillInWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, uninstallSkillInWorkspace, arg.WorkspaceID, arg.Author, arg.Name)
+	return err
+}
+
+const updateSkillInWorkspace = `-- name: UpdateSkillInWorkspace :exec
+UPDATE app_skills
+SET version = $4, description = $5, when_to_use = $6, tags = $7, updated_at = now()
+WHERE workspace_id = $1 AND author = $2 AND name = $3
+`
+
+type UpdateSkillInWorkspaceParams struct {
+	WorkspaceID string
+	Author      string
+	Name        string
+	Version     string
 	Description string
 	WhenToUse   string
 	Tags        string
-	Version     string
-	ID          string
 }
 
-func (q *Queries) UpdateSkill(ctx context.Context, arg UpdateSkillParams) error {
-	_, err := q.db.Exec(ctx, updateSkill,
+func (q *Queries) UpdateSkillInWorkspace(ctx context.Context, arg UpdateSkillInWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, updateSkillInWorkspace,
+		arg.WorkspaceID,
+		arg.Author,
+		arg.Name,
+		arg.Version,
 		arg.Description,
 		arg.WhenToUse,
 		arg.Tags,
-		arg.Version,
-		arg.ID,
 	)
 	return err
 }

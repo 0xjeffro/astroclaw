@@ -1,16 +1,21 @@
--- Skill metadata. The actual skill content (SKILL.md + supporting files) lives in S3.
--- This table stores the index for discovery and loading.
+-- Skills installed in a workspace. The skill content (SKILL.md + supporting
+-- files) lives in S3 at skills/{author}/{name}/{version}/..., shared across all workspaces.
+--
+-- This table stores a per-workspace snapshot of the metadata so the agent
+-- can build the system prompt without calling the S3.
+--
+-- A workspace installs at most one version of a given (author, name) at a
+-- time. Switching version is an UPDATE on the version column.
 
 CREATE TABLE app_skills (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    author      TEXT NOT NULL DEFAULT '',        -- skill author, used with name for uniqueness
-    name        TEXT NOT NULL,                   -- skill identifier, unique within the same author
-    description TEXT NOT NULL,                   -- brief summary, shown in system prompt index
-    when_to_use TEXT NOT NULL DEFAULT '',        -- helps agent decide when to load this skill,
-                                                 -- more specifically than description
-    tags        TEXT NOT NULL DEFAULT '',        -- comma-separated tags for filtering
-    version     TEXT NOT NULL DEFAULT '',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (author, name)
+    workspace_id UUID NOT NULL,
+    author       TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    version      TEXT NOT NULL,
+    description  TEXT NOT NULL DEFAULT '',
+    when_to_use  TEXT NOT NULL DEFAULT '',
+    tags         TEXT NOT NULL DEFAULT '',
+    installed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, author, name)
 );

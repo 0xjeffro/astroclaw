@@ -1,6 +1,7 @@
 package main
 
 import (
+	"astroclaw/pkg/app/system"
 	"bytes"
 	"context"
 	"fmt"
@@ -17,7 +18,8 @@ import (
 )
 
 // seedDefaultSkills reads skill directories bundled with the Lambda,
-// uploads each file to S3, and writes metadata to DSQL.
+// uploads each file to S3 under skills/{author}/{name}/{version}/...,
+// and writes a per-workspace installation record to DSQL.
 // Skips skills that already exist in the database.
 func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 	bucket := os.Getenv("SKILLS_BUCKET")
@@ -33,6 +35,21 @@ func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 	s3Client := s3.NewFromConfig(awsCfg)
 
 	skillsSvc := skills.NewService(pool)
+
+	sysSvc := system.NewService(pool)
+	// Find the default workspace (the admin's first workspace).
+	admin, err := sysSvc.GetAdmin(ctx)
+	if err != nil {
+		return fmt.Errorf("get admin for agent seed: %w", err)
+	}
+	workspaces, err := sysSvc.ListWorkspacesForUser(ctx, admin.ID)
+	if err != nil {
+		return fmt.Errorf("list admin workspaces: %w", err)
+	}
+	if len(workspaces) == 0 {
+		return fmt.Errorf("admin has no workspace to seed agent into")
+	}
+	workspaceID := workspaces[0].ID
 
 	// Scan skills/ directory for @author/name directories containing SKILL.md.
 	authors, err := filepath.Glob("skills/@*")
@@ -57,16 +74,13 @@ func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 				continue
 			}
 
-			// Only skip if the skill definitively exists (err == nil and record returned).
-			// If err != nil it could be a DB connection issue, not "not found".
-			// In that case we proceed and let CreateSkill's UNIQUE constraint handle it.
-			existing, err := skillsSvc.GetSkillByName(ctx, author, skillName)
-			if err == nil && existing != nil {
-				log.Printf("skill %s/%s already exists, skipping", author, skillName)
+			// Only skip if the skill definitively exists for this workspace
+			// (err == nil and record returned). If err != nil it could be a
+			// DB connection issue, not "not found"; let the InstallSkill call below surface the real error.
+			if existing, err := skillsSvc.GetSkillFromWorkspace(ctx, workspaceID, author, skillName); err == nil && existing != nil {
+				log.Printf("skill %s/%s already installed in workspace, skipping", author, skillName)
 				continue
 			}
-			// If we reach here: err != nil (possible DB issue) or existing == nil (skill really doesn't exist).
-			// Either way, proceed with seeding.
 
 			// Read SKILL.md to extract description from frontmatter.
 			content, err := os.ReadFile(skillMD)
@@ -74,7 +88,7 @@ func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 				log.Printf("read %s: %v", skillMD, err)
 				continue
 			}
-			description, whenToUse := parseFrontmatter(string(content))
+			description, whenToUse, version := parseFrontmatter(string(content))
 
 			// Upload S3 first, then write DB. DB is the source of truth for the agent at runtime:
 			// if a skill has a DB record, the agent expects its
@@ -85,19 +99,19 @@ func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 			//
 			// Scenario B: S3 partially uploads, then fails
 			// Same as A. Skill invisible, next deploy overwrites all files.
-			if err := uploadSkillFiles(ctx, s3Client, bucket, author, skillName, skillDir); err != nil {
+			if err := uploadSkillFiles(ctx, s3Client, bucket, author, skillName, version, skillDir); err != nil {
 				log.Printf("upload %s/%s to S3: %v", author, skillName, err)
 				continue
 			}
 
 			// Write metadata to DSQL.
-			_, err = skillsSvc.CreateSkill(ctx, author, skillName, description, whenToUse, nil, "0.1.0")
+			_, err = skillsSvc.InstallSkill(ctx, workspaceID, author, skillName, version, description, whenToUse, nil)
 			if err != nil {
-				log.Printf("create skill %s/%s in DB: %v", author, skillName, err)
+				log.Printf("install skill %s/%s in DB: %v", author, skillName, err)
 				continue
 			}
 
-			log.Printf("seeded skill: %s/%s", author, skillName)
+			log.Printf("seeded skill: %s/%s@%s", author, skillName, version)
 		}
 	}
 
@@ -105,8 +119,8 @@ func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 // uploadSkillFiles uploads all files in a skill directory to S3,
-// preserving the directory structure under skills/{author}/{name}/.
-func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, name, dir string) error {
+// preserving the directory structure under skills/{author}/{name}/{version}/.
+func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, name, version, dir string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -115,12 +129,12 @@ func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, na
 			return nil
 		}
 
-		// Build S3 key: skills/@author/name/relative-path
+		// Build S3 key: skills/@author/name/version/relative-path
 		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
 		}
-		s3Key := fmt.Sprintf("skills/%s/%s/%s", author, name, relPath)
+		s3Key := fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, relPath)
 
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -141,25 +155,26 @@ func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, na
 	})
 }
 
-// parseFrontmatter extracts description and when_to_use from SKILL.md YAML frontmatter.
-func parseFrontmatter(content string) (description, whenToUse string) {
+// parseFrontmatter extracts description, when_to_use, and version from
+// SKILL.md YAML frontmatter. Missing fields are returned as empty strings.
+func parseFrontmatter(content string) (description, whenToUse, version string) {
 	// TODO: when Skill Store is implemented, valid frontmatter should
 	// be a hard requirement for pre-validating. Reject skills without it.
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
 		log.Printf("warning: SKILL.md has no valid YAML frontmatter (missing --- delimiters)")
-		return "", ""
+		return "", "", ""
 	}
 	frontmatter := parts[1]
 	for _, line := range strings.Split(frontmatter, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "description:") {
-			description = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
-			description = strings.Trim(description, "\"'")
-		}
-		if strings.HasPrefix(line, "when_to_use:") {
-			whenToUse = strings.TrimSpace(strings.TrimPrefix(line, "when_to_use:"))
-			whenToUse = strings.Trim(whenToUse, "\"'")
+		switch {
+		case strings.HasPrefix(line, "description:"):
+			description = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "description:")), "\"'")
+		case strings.HasPrefix(line, "when_to_use:"):
+			whenToUse = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "when_to_use:")), "\"'")
+		case strings.HasPrefix(line, "version:"):
+			version = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "version:")), "\"'")
 		}
 	}
 	return

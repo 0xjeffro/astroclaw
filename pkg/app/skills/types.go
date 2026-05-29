@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -9,14 +8,14 @@ import (
 )
 
 type Skill struct {
-	ID          string
+	WorkspaceID string
 	Author      string
 	Name        string
+	Version     string
 	Description string
 	WhenToUse   string
 	Tags        []string
-	Version     string
-	CreatedAt   time.Time
+	InstalledAt time.Time
 	UpdatedAt   time.Time
 }
 
@@ -28,25 +27,20 @@ func (s *Skill) FullName() string {
 	return s.Author + "/" + s.Name
 }
 
-// S3Key returns the S3 object key for this skill's ZIP archive.
-func (s *Skill) S3Key() string {
-	return fmt.Sprintf("skills/%s/%s.zip", s.Author, s.Name)
-}
-
 func SkillFromDB(s db.AppSkill) *Skill {
 	var tags []string
 	if s.Tags != "" {
 		tags = strings.Split(s.Tags, ",")
 	}
 	return &Skill{
-		ID:          s.ID,
+		WorkspaceID: s.WorkspaceID,
 		Author:      s.Author,
 		Name:        s.Name,
+		Version:     s.Version,
 		Description: s.Description,
 		WhenToUse:   s.WhenToUse,
 		Tags:        tags,
-		Version:     s.Version,
-		CreatedAt:   s.CreatedAt,
+		InstalledAt: s.InstalledAt,
 		UpdatedAt:   s.UpdatedAt,
 	}
 }

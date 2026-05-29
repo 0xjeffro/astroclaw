@@ -96,24 +96,13 @@ func init() {
 	skillsBucket := os.Getenv("SKILLS_BUCKET")
 
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
-		// TODO: read workspace_id from s.WorkspaceID once the chat session table
-		// carries it. For now, look it up via the session's user.
-		workspaces, err := systemSvc.ListWorkspacesForUser(context.Background(), s.UserID)
-		if err != nil {
-			return nil, fmt.Errorf("list workspaces for user %q: %w", s.UserID, err)
-		}
-		if len(workspaces) == 0 {
-			return nil, fmt.Errorf("user %q has no workspace", s.UserID)
-		}
-		workspaceID := workspaces[0].ID
-
 		// Load agent profile dynamically per request.
-		agentProfile, err := agentsSvc.GetAgentFromWorkspace(context.Background(), workspaceID, agentID)
+		agentProfile, err := agentsSvc.GetAgentFromWorkspace(context.Background(), s.WorkspaceID, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
 
-		systemPrompt := buildPrompt(context.Background(), agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
+		systemPrompt := buildPrompt(context.Background(), s.WorkspaceID, agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
 
 		registry := tool.NewRegistry()
 		registry.Register(&tool.TimeTool{})
@@ -135,9 +124,10 @@ func init() {
 		})
 		registry.Register(webfetch.New())
 		registry.Register(&toolskills.Tool{
-			Skills:   skillsSvc,
-			S3Client: s3Client,
-			Bucket:   skillsBucket,
+			Skills:      skillsSvc,
+			S3Client:    s3Client,
+			Bucket:      skillsBucket,
+			WorkspaceID: s.WorkspaceID,
 		})
 
 		a := agent.NewFromContext(
@@ -188,7 +178,7 @@ func init() {
 	svc = chat.NewService(pool, createFn)
 }
 
-func buildPrompt(ctx context.Context, agentProfile *agents.Agent, userID string, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
+func buildPrompt(ctx context.Context, workspaceID string, agentProfile *agents.Agent, userID string, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
 	var cfg agent.PromptConfig
 	cfg.Soul = agentProfile.Soul
 	if user, err := settingsSvc.GetKVSetting(ctx, settings.SettingUserProfile); err == nil {
@@ -197,7 +187,7 @@ func buildPrompt(ctx context.Context, agentProfile *agents.Agent, userID string,
 	if memories, err := notesSvc.FormatUserMemoryForPrompt(ctx, agentProfile.ID, userID, agent.DefaultCharLimits().Memories); err == nil {
 		cfg.Memories = memories
 	}
-	if skillList, err := skillsSvc.ListSkills(ctx); err == nil {
+	if skillList, err := skillsSvc.ListSkillsByWorkspace(ctx, workspaceID); err == nil {
 		cfg.Skills = appskills.FormatForPrompt(skillList)
 	}
 	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
