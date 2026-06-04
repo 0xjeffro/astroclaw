@@ -181,7 +181,7 @@ func init() {
 func buildPrompt(ctx context.Context, workspaceID string, agentProfile *agents.Agent, userID string, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
 	var cfg agent.PromptConfig
 	cfg.Soul = agentProfile.Soul
-	if user, err := settingsSvc.GetKVSetting(ctx, settings.SettingUserProfile); err == nil {
+	if user, err := settingsSvc.GetUserSetting(ctx, userID, settings.SettingUserProfile); err == nil {
 		cfg.User = user.Value
 	}
 	if memories, err := notesSvc.FormatUserMemoryForPrompt(ctx, agentProfile.ID, userID, agent.DefaultCharLimits().Memories); err == nil {

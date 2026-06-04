@@ -95,14 +95,28 @@ CREATE TABLE "public"."app_passwords_credentials" (
   "deleted_at" timestamptz NULL,
   PRIMARY KEY ("id")
 );
--- Create "app_settings_kv" table
-CREATE TABLE "public"."app_settings_kv" (
-  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+-- Create "app_settings_system" table
+CREATE TABLE "public"."app_settings_system" (
   "name" text NOT NULL,
   "value" text NOT NULL DEFAULT '',
   "updated_at" timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY ("id"),
-  CONSTRAINT "app_settings_kv_name_key" UNIQUE ("name")
+  PRIMARY KEY ("name")
+);
+-- Create "app_settings_user" table
+CREATE TABLE "public"."app_settings_user" (
+  "user_id" uuid NOT NULL,
+  "name" text NOT NULL,
+  "value" text NOT NULL DEFAULT '',
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("user_id", "name")
+);
+-- Create "app_settings_workspace" table
+CREATE TABLE "public"."app_settings_workspace" (
+  "workspace_id" uuid NOT NULL,
+  "name" text NOT NULL,
+  "value" text NOT NULL DEFAULT '',
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("workspace_id", "name")
 );
 -- Create "app_skills" table
 CREATE TABLE "public"."app_skills" (

@@ -64,8 +64,8 @@ func (b *backend) listUserWorkspaces(ctx context.Context, userID string) ([]stri
 	return ids, nil
 }
 
-func (b *backend) getSetting(ctx context.Context, name string) (string, error) {
-	resp, err := b.get(ctx, "/settings/"+name)
+func (b *backend) getWorkspaceSetting(ctx context.Context, workspaceID, name string) (string, error) {
+	resp, err := b.get(ctx, "/workspaces/"+workspaceID+"/settings/"+name)
 	if err != nil {
 		return "", err
 	}

@@ -61,23 +61,29 @@ func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 	path := req.RequestContext.HTTP.Path
 	method := req.RequestContext.HTTP.Method
 
-	// Workspace-scoped routes: /workspaces/{workspaceID}/sessions[/{sessionID}]
+	// Workspace-scoped routes:
+	//   /workspaces/{workspaceID}/sessions[/{sessionID}]
+	//   /workspaces/{workspaceID}/settings/{name}
 	if strings.HasPrefix(path, "/workspaces/") {
 		segs := strings.Split(strings.Trim(path, "/"), "/")
-		// segs: ["workspaces", "{wsID}", "sessions", ...]
-		if len(segs) < 3 || segs[2] != "sessions" {
+		// segs: ["workspaces", "{wsID}", "sessions"|"settings", ...]
+		if len(segs) < 3 || (segs[2] != "sessions" && segs[2] != "settings") {
 			return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
 		}
 		workspaceID := segs[1]
 		switch {
-		case method == "POST" && len(segs) == 3:
+		case method == "POST" && segs[2] == "sessions" && len(segs) == 3:
 			return handleCreateSessionInWorkspace(ctx, workspaceID, req)
-		case method == "GET" && len(segs) == 3:
+		case method == "GET" && segs[2] == "sessions" && len(segs) == 3:
 			return handleListSessions(ctx, workspaceID)
-		case method == "GET" && len(segs) == 4:
+		case method == "GET" && segs[2] == "sessions" && len(segs) == 4:
 			return handleGetSession(ctx, segs[3])
-		case method == "DELETE" && len(segs) == 4:
+		case method == "DELETE" && segs[2] == "sessions" && len(segs) == 4:
 			return handleDeleteSession(ctx, segs[3])
+		case method == "GET" && segs[2] == "settings" && len(segs) == 4:
+			return handleGetWorkspaceSetting(ctx, workspaceID, segs[3])
+		case method == "PUT" && segs[2] == "settings" && len(segs) == 4:
+			return handleUpsertWorkspaceSetting(ctx, workspaceID, segs[3], req)
 		}
 		return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
 	}
@@ -137,11 +143,32 @@ func handleDeleteSession(ctx context.Context, id string) (events.APIGatewayV2HTT
 }
 
 func handleGetSetting(ctx context.Context, name string) (events.APIGatewayV2HTTPResponse, error) {
-	s, err := settingsSvc.GetKVSetting(ctx, name)
+	s, err := settingsSvc.GetSystemSetting(ctx, name)
 	if err != nil {
 		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
 	}
 	return jsonResponse(http.StatusOK, s)
+}
+
+func handleGetWorkspaceSetting(ctx context.Context, workspaceID, name string) (events.APIGatewayV2HTTPResponse, error) {
+	s, err := settingsSvc.GetWorkspaceSetting(ctx, workspaceID, name)
+	if err != nil {
+		return jsonResponse(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+	return jsonResponse(http.StatusOK, s)
+}
+
+func handleUpsertWorkspaceSetting(ctx context.Context, workspaceID, name string, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	var body struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
+		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	}
+	if err := settingsSvc.UpsertWorkspaceSetting(ctx, workspaceID, name, body.Value); err != nil {
+		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return jsonResponse(http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func handleGetAdmin(ctx context.Context) (events.APIGatewayV2HTTPResponse, error) {

@@ -14,37 +14,64 @@ type Service struct {
 }
 
 func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{
-		queries: db.New(pool),
-	}
+	return &Service{queries: db.New(pool)}
 }
 
-func (svc *Service) GetKVSetting(ctx context.Context, name string) (*KVSetting, error) {
-	s, err := svc.queries.GetKVSetting(ctx, name)
+// System scope
+
+func (svc *Service) GetSystemSetting(ctx context.Context, name string) (*SystemSetting, error) {
+	s, err := svc.queries.GetSystemSetting(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("setting %q: %w", name, ErrNotFound)
+		return nil, fmt.Errorf("system setting %q: %w", name, ErrNotFound)
 	}
-	return KVSettingFromDB(s), nil
+	return SystemSettingFromDB(s), nil
 }
 
-// UpsertKVSetting creates a setting if it doesn't exist, or updates
-// its value if it does.
-func (svc *Service) UpsertKVSetting(ctx context.Context, name, value string) error {
-	_, err := svc.queries.GetKVSetting(ctx, name)
-	if err != nil {
-		// Doesn't exist, create it.
-		_, err = svc.queries.CreateKVSetting(ctx, db.CreateKVSettingParams{
-			Name:  name,
-			Value: value,
-		})
-		if err != nil {
-			return fmt.Errorf("create setting %q: %w", name, err)
-		}
-		return nil
-	}
-	// Exists, update it.
-	return svc.queries.UpdateKVSetting(ctx, db.UpdateKVSettingParams{
-		Value: value,
+func (svc *Service) UpsertSystemSetting(ctx context.Context, name, value string) error {
+	return svc.queries.UpsertSystemSetting(ctx, db.UpsertSystemSettingParams{
 		Name:  name,
+		Value: value,
+	})
+}
+
+// Workspace scope
+
+func (svc *Service) GetWorkspaceSetting(ctx context.Context, workspaceID, name string) (*WorkspaceSetting, error) {
+	s, err := svc.queries.GetWorkspaceSetting(ctx, db.GetWorkspaceSettingParams{
+		WorkspaceID: workspaceID,
+		Name:        name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workspace setting %q: %w", name, ErrNotFound)
+	}
+	return WorkspaceSettingFromDB(s), nil
+}
+
+func (svc *Service) UpsertWorkspaceSetting(ctx context.Context, workspaceID, name, value string) error {
+	return svc.queries.UpsertWorkspaceSetting(ctx, db.UpsertWorkspaceSettingParams{
+		WorkspaceID: workspaceID,
+		Name:        name,
+		Value:       value,
+	})
+}
+
+// User scope
+
+func (svc *Service) GetUserSetting(ctx context.Context, userID, name string) (*UserSetting, error) {
+	s, err := svc.queries.GetUserSetting(ctx, db.GetUserSettingParams{
+		UserID: userID,
+		Name:   name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("user setting %q: %w", name, ErrNotFound)
+	}
+	return UserSettingFromDB(s), nil
+}
+
+func (svc *Service) UpsertUserSetting(ctx context.Context, userID, name, value string) error {
+	return svc.queries.UpsertUserSetting(ctx, db.UpsertUserSettingParams{
+		UserID: userID,
+		Name:   name,
+		Value:  value,
 	})
 }

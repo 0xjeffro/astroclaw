@@ -126,8 +126,8 @@ func (r *remoteBackend) ListUserWorkspaces(ctx context.Context, userID string) (
 	return ids, nil
 }
 
-func (r *remoteBackend) GetSetting(ctx context.Context, name string) (string, error) {
-	resp, err := r.get(ctx, "/settings/"+name)
+func (r *remoteBackend) GetWorkspaceSetting(ctx context.Context, workspaceID, name string) (string, error) {
+	resp, err := r.get(ctx, "/workspaces/"+workspaceID+"/settings/"+name)
 	if err != nil {
 		return "", err
 	}
@@ -243,7 +243,7 @@ func main() {
 
 	// TODO: support switch workspace
 	workspaceID := workspaces[0]
-	defaultAgentID, err := backend.GetSetting(ctx, settings.SettingDefaultAgentID)
+	defaultAgentID, err := backend.GetWorkspaceSetting(ctx, workspaceID, settings.SettingWorkspaceDefaultAgentID)
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}

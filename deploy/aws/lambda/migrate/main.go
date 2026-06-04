@@ -80,10 +80,6 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 		return nil, err
 	}
 
-	if err := seedSettings(ctx, pool); err != nil {
-		return nil, err
-	}
-
 	if err := seedDefaultUser(ctx, pool); err != nil {
 		return nil, err
 	}
@@ -245,30 +241,6 @@ func seedCredentials(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// seedSettings writes default KV settings on first deploy.
-// Only creates settings that don't exist yet.
-func seedSettings(ctx context.Context, pool *pgxpool.Pool) error {
-	svc := settings.NewService(pool)
-
-	defaults := []struct {
-		name  string
-		value string
-	}{
-		{settings.SettingUserProfile, ""},
-	}
-
-	for _, d := range defaults {
-		// Only seed if the setting doesn't exist yet.
-		if _, err := svc.GetKVSetting(ctx, d.name); err != nil {
-			if err := svc.UpsertKVSetting(ctx, d.name, d.value); err != nil {
-				return fmt.Errorf("seed setting %q: %w", d.name, err)
-			}
-			log.Printf("seeded setting: %s", d.name)
-		}
-	}
-	return nil
-}
-
 // seedDefaultUser creates the admin user on first deploy if none exists.
 func seedDefaultUser(ctx context.Context, pool *pgxpool.Pool) error {
 	svc := system.NewService(pool)
@@ -367,7 +339,7 @@ func seedDefaultAgent(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// Set the genesis agent as the default agent.
 	settingsSvc := settings.NewService(pool)
-	if err := settingsSvc.UpsertKVSetting(ctx, settings.SettingDefaultAgentID, a.ID); err != nil {
+	if err := settingsSvc.UpsertWorkspaceSetting(ctx, workspaceID, settings.SettingWorkspaceDefaultAgentID, a.ID); err != nil {
 		return fmt.Errorf("seed default_agent_id setting: %w", err)
 	}
 	log.Printf("seeded default_agent_id: %s", a.ID)

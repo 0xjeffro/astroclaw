@@ -9,56 +9,116 @@ import (
 	"context"
 )
 
-const createKVSetting = `-- name: CreateKVSetting :one
-INSERT INTO app_settings_kv (name, value)
+const getSystemSetting = `-- name: GetSystemSetting :one
+
+SELECT name, value, updated_at FROM app_settings_system WHERE name = $1
+`
+
+// System scope (deploy-wide)
+func (q *Queries) GetSystemSetting(ctx context.Context, name string) (AppSettingsSystem, error) {
+	row := q.db.QueryRow(ctx, getSystemSetting, name)
+	var i AppSettingsSystem
+	err := row.Scan(&i.Name, &i.Value, &i.UpdatedAt)
+	return i, err
+}
+
+const getUserSetting = `-- name: GetUserSetting :one
+
+SELECT user_id, name, value, updated_at FROM app_settings_user
+WHERE user_id = $1 AND name = $2
+`
+
+type GetUserSettingParams struct {
+	UserID string
+	Name   string
+}
+
+// User scope
+func (q *Queries) GetUserSetting(ctx context.Context, arg GetUserSettingParams) (AppSettingsUser, error) {
+	row := q.db.QueryRow(ctx, getUserSetting, arg.UserID, arg.Name)
+	var i AppSettingsUser
+	err := row.Scan(
+		&i.UserID,
+		&i.Name,
+		&i.Value,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getWorkspaceSetting = `-- name: GetWorkspaceSetting :one
+
+SELECT workspace_id, name, value, updated_at FROM app_settings_workspace
+WHERE workspace_id = $1 AND name = $2
+`
+
+type GetWorkspaceSettingParams struct {
+	WorkspaceID string
+	Name        string
+}
+
+// Workspace scope
+func (q *Queries) GetWorkspaceSetting(ctx context.Context, arg GetWorkspaceSettingParams) (AppSettingsWorkspace, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceSetting, arg.WorkspaceID, arg.Name)
+	var i AppSettingsWorkspace
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Value,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertSystemSetting = `-- name: UpsertSystemSetting :exec
+INSERT INTO app_settings_system (name, value)
 VALUES ($1, $2)
-RETURNING id, name, value, updated_at
+ON CONFLICT (name) DO UPDATE
+SET value = EXCLUDED.value, updated_at = now()
 `
 
-type CreateKVSettingParams struct {
+type UpsertSystemSettingParams struct {
 	Name  string
 	Value string
 }
 
-func (q *Queries) CreateKVSetting(ctx context.Context, arg CreateKVSettingParams) (AppSettingsKv, error) {
-	row := q.db.QueryRow(ctx, createKVSetting, arg.Name, arg.Value)
-	var i AppSettingsKv
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Value,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) UpsertSystemSetting(ctx context.Context, arg UpsertSystemSettingParams) error {
+	_, err := q.db.Exec(ctx, upsertSystemSetting, arg.Name, arg.Value)
+	return err
 }
 
-const getKVSetting = `-- name: GetKVSetting :one
-SELECT id, name, value, updated_at FROM app_settings_kv WHERE name = $1
+const upsertUserSetting = `-- name: UpsertUserSetting :exec
+INSERT INTO app_settings_user (user_id, name, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, name) DO UPDATE
+SET value = EXCLUDED.value, updated_at = now()
 `
 
-func (q *Queries) GetKVSetting(ctx context.Context, name string) (AppSettingsKv, error) {
-	row := q.db.QueryRow(ctx, getKVSetting, name)
-	var i AppSettingsKv
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Value,
-		&i.UpdatedAt,
-	)
-	return i, err
+type UpsertUserSettingParams struct {
+	UserID string
+	Name   string
+	Value  string
 }
 
-const updateKVSetting = `-- name: UpdateKVSetting :exec
-UPDATE app_settings_kv SET value = $1, updated_at = now()
-WHERE name = $2
+func (q *Queries) UpsertUserSetting(ctx context.Context, arg UpsertUserSettingParams) error {
+	_, err := q.db.Exec(ctx, upsertUserSetting, arg.UserID, arg.Name, arg.Value)
+	return err
+}
+
+const upsertWorkspaceSetting = `-- name: UpsertWorkspaceSetting :exec
+INSERT INTO app_settings_workspace (workspace_id, name, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (workspace_id, name) DO UPDATE
+SET value = EXCLUDED.value, updated_at = now()
 `
 
-type UpdateKVSettingParams struct {
-	Value string
-	Name  string
+type UpsertWorkspaceSettingParams struct {
+	WorkspaceID string
+	Name        string
+	Value       string
 }
 
-func (q *Queries) UpdateKVSetting(ctx context.Context, arg UpdateKVSettingParams) error {
-	_, err := q.db.Exec(ctx, updateKVSetting, arg.Value, arg.Name)
+func (q *Queries) UpsertWorkspaceSetting(ctx context.Context, arg UpsertWorkspaceSettingParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkspaceSetting, arg.WorkspaceID, arg.Name, arg.Value)
 	return err
 }

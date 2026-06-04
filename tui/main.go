@@ -40,7 +40,7 @@ func main() {
 		log.Fatalf("admin has no workspaces")
 	}
 	workspaceID := workspaces[0]
-	defaultAgentID, err := backend.getSetting(ctx, "default_agent_id")
+	defaultAgentID, err := backend.getWorkspaceSetting(ctx, workspaceID, "default_agent_id")
 	if err != nil {
 		log.Fatalf("failed to get default agent: %v", err)
 	}

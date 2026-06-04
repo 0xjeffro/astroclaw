@@ -8,9 +8,22 @@ import (
 	"time"
 )
 
-type AppSettingsKv struct {
-	ID        string
+type AppSettingsSystem struct {
 	Name      string
 	Value     string
 	UpdatedAt time.Time
+}
+
+type AppSettingsUser struct {
+	UserID    string
+	Name      string
+	Value     string
+	UpdatedAt time.Time
+}
+
+type AppSettingsWorkspace struct {
+	WorkspaceID string
+	Name        string
+	Value       string
+	UpdatedAt   time.Time
 }
