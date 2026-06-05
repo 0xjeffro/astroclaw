@@ -126,6 +126,12 @@ exports[`snapshot 1`] = `
                 "Endpoint",
               ],
             },
+            "PASSWORDS_KMS_KEY_ID": {
+              "Fn::GetAtt": [
+                "PasswordsKeyC846CE1E",
+                "Arn",
+              ],
+            },
           },
         },
         "Handler": "bootstrap",
@@ -176,6 +182,21 @@ exports[`snapshot 1`] = `
       "Properties": {
         "PolicyDocument": {
           "Statement": [
+            {
+              "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PasswordsKeyC846CE1E",
+                  "Arn",
+                ],
+              },
+            },
             {
               "Action": "dsql:DbConnectAdmin",
               "Effect": "Allow",
@@ -392,6 +413,12 @@ exports[`snapshot 1`] = `
                 "",
               ],
             },
+            "PASSWORDS_KMS_KEY_ID": {
+              "Fn::GetAtt": [
+                "PasswordsKeyC846CE1E",
+                "Arn",
+              ],
+            },
             "SKILLS_BUCKET": {
               "Ref": "SkillsBucket512669F8",
             },
@@ -450,6 +477,21 @@ exports[`snapshot 1`] = `
                   ],
                 },
               ],
+            },
+            {
+              "Action": [
+                "kms:Decrypt",
+                "kms:Encrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PasswordsKeyC846CE1E",
+                  "Arn",
+                ],
+              },
             },
             {
               "Action": "dsql:DbConnectAdmin",
@@ -626,6 +668,55 @@ exports[`snapshot 1`] = `
       },
       "Type": "AWS::IAM::Role",
     },
+    "PasswordsKeyAliasDB4E8B13": {
+      "Properties": {
+        "AliasName": "alias/astroclaw-passwords",
+        "TargetKeyId": {
+          "Fn::GetAtt": [
+            "PasswordsKeyC846CE1E",
+            "Arn",
+          ],
+        },
+      },
+      "Type": "AWS::KMS::Alias",
+    },
+    "PasswordsKeyC846CE1E": {
+      "DeletionPolicy": "Delete",
+      "Properties": {
+        "Description": "Encrypts workspace/user/system scoped data keys for the passwords app",
+        "EnableKeyRotation": true,
+        "KeyPolicy": {
+          "Statement": [
+            {
+              "Action": "kms:*",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition",
+                      },
+                      ":iam::",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":root",
+                    ],
+                  ],
+                },
+              },
+              "Resource": "*",
+            },
+          ],
+          "Version": "2012-10-17",
+        },
+      },
+      "Type": "AWS::KMS::Key",
+      "UpdateReplacePolicy": "Delete",
+    },
     "ReplyHandlerED1A6F38": {
       "DependsOn": [
         "ReplyHandlerServiceRoleDefaultPolicy29B9895A",
@@ -647,6 +738,12 @@ exports[`snapshot 1`] = `
               "Fn::GetAtt": [
                 "DsqlCluster",
                 "Endpoint",
+              ],
+            },
+            "PASSWORDS_KMS_KEY_ID": {
+              "Fn::GetAtt": [
+                "PasswordsKeyC846CE1E",
+                "Arn",
               ],
             },
             "SKILLS_BUCKET": {
@@ -763,6 +860,16 @@ exports[`snapshot 1`] = `
                   ],
                 },
               ],
+            },
+            {
+              "Action": "kms:Decrypt",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PasswordsKeyC846CE1E",
+                  "Arn",
+                ],
+              },
             },
             {
               "Action": "execute-api:ManageConnections",

@@ -5,6 +5,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { execSync } from 'child_process';
@@ -76,6 +77,25 @@ export class InfraStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
     });
 
+    // KMS Customer Managed Key for envelope encryption of credentials.
+    // Used by the passwords app: per-scope(user/workspace/system scope) data keys are encrypted with
+    // this CMK and stored in DSQL; Lambdas decrypt the data key once at
+    // cold start, cache it, then perform local AES-GCM encrypt/decrypt
+    // on individual credentials. Yearly auto-rotation keeps a fresh key
+    // version without invalidating existing ciphertexts.
+    // https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html
+    // In production we RETAIN the key so accidental stack deletion doesn't
+    // make every encrypted credential permanently unrecoverable. Toggle via
+    //   cdk deploy -c isProd=true
+    const isProd = this.node.tryGetContext('isProd') === true;
+
+    const passwordsKey = new kms.Key(this, 'PasswordsKey', {
+      alias: 'astroclaw-passwords',
+      enableKeyRotation: true,
+      description: 'Encrypts workspace/user/system scoped data keys for the passwords app',
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
     // Lambda CDK docs: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda.Function.html
     // Lambda custom runtime docs: https://docs.aws.amazon.com/lambda/latest/dg/runtimes-custom.html
     const apiHandler = new lambda.Function(this, 'ApiHandler', {
@@ -112,10 +132,17 @@ export class InfraStack extends cdk.Stack {
       }),
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
+        PASSWORDS_KMS_KEY_ID: passwordsKey.keyArn,
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
     });
+
+    // API Lambda upserts workspace and user credentials.
+    // Both Encrypt and Decrypt permission is required here because
+    // 1. When we set credentials, we need it to "decrypt" the data key and use this decrypted data key to encrypt the credential.
+    // 2. When we create a new user or workspace by lambda api, we need use this key to encrypt the data key of this user/ workspace.
+    passwordsKey.grantEncryptDecrypt(apiHandler);
 
     const wsApi = new apigwv2.WebSocketApi(this, 'WebSocketApi', {
       apiName: 'astroclaw-ws',
@@ -248,6 +275,7 @@ export class InfraStack extends cdk.Stack {
         DSQL_ENDPOINT: cluster.attrEndpoint,
         WS_ENDPOINT: wsStage.callbackUrl,
         SKILLS_BUCKET: skillsBucket.bucketName,
+        PASSWORDS_KMS_KEY_ID: passwordsKey.keyArn,
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -255,6 +283,10 @@ export class InfraStack extends cdk.Stack {
 
     // Grant Reply Lambda read access to the skills bucket.
     skillsBucket.grantRead(replyHandler);
+
+    // Reply Lambda decrypts cached data keys at cold start;
+    // We adhere to least-privilege principle here.
+    passwordsKey.grantDecrypt(replyHandler);
 
     // Allow Reply Lambda to push events to WebSocket clients via PostToConnection.
     // PostToConnection is part of the API Gateway Management API (@connections),
@@ -308,6 +340,7 @@ export class InfraStack extends cdk.Stack {
           'ShouldGenerateApiKey', generatedApiKey, '',
         ).toString(),
         SKILLS_BUCKET: skillsBucket.bucketName,
+        PASSWORDS_KMS_KEY_ID: passwordsKey.keyArn,
       },
       timeout: cdk.Duration.minutes(5),
       memorySize: 256,
@@ -315,6 +348,10 @@ export class InfraStack extends cdk.Stack {
 
     // Migrate Lambda needs S3 write access to seed default skills on first deploy.
     skillsBucket.grantReadWrite(migrateHandler);
+
+    // Migrate Lambda generates the per-scope data keys on first deploy and
+    // wraps them with the CMK before writing to DSQL.
+    passwordsKey.grantEncryptDecrypt(migrateHandler);
 
     // IAM permissions for DSQL access.
     // https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonauroradsql.html
