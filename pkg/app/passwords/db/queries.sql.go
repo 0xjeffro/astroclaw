@@ -7,76 +7,409 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
-const createCredential = `-- name: CreateCredential :one
-INSERT INTO app_passwords_credentials (name, value, description)
-VALUES ($1, $2, $3)
-RETURNING id, name, value, description, created_at, updated_at, deleted_at
+const deleteSystemCredential = `-- name: DeleteSystemCredential :exec
+DELETE FROM app_passwords_system_credentials WHERE name = $1
 `
 
-type CreateCredentialParams struct {
-	Name        string
-	Value       string
-	Description string
-}
-
-func (q *Queries) CreateCredential(ctx context.Context, arg CreateCredentialParams) (AppPasswordsCredential, error) {
-	row := q.db.QueryRow(ctx, createCredential, arg.Name, arg.Value, arg.Description)
-	var i AppPasswordsCredential
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Value,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
-const getCredentialByName = `-- name: GetCredentialByName :one
-SELECT id, name, value, description, created_at, updated_at, deleted_at FROM app_passwords_credentials WHERE name = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) GetCredentialByName(ctx context.Context, name string) (AppPasswordsCredential, error) {
-	row := q.db.QueryRow(ctx, getCredentialByName, name)
-	var i AppPasswordsCredential
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Value,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
-}
-
-const softDeleteCredential = `-- name: SoftDeleteCredential :exec
-UPDATE app_passwords_credentials SET deleted_at = now() WHERE name = $1 AND deleted_at IS NULL
-`
-
-func (q *Queries) SoftDeleteCredential(ctx context.Context, name string) error {
-	_, err := q.db.Exec(ctx, softDeleteCredential, name)
+func (q *Queries) DeleteSystemCredential(ctx context.Context, name string) error {
+	_, err := q.db.Exec(ctx, deleteSystemCredential, name)
 	return err
 }
 
-const updateCredential = `-- name: UpdateCredential :exec
-UPDATE app_passwords_credentials
-SET value = $1, description = $2, updated_at = now()
-WHERE name = $3 AND deleted_at IS NULL
+const deleteUserCredential = `-- name: DeleteUserCredential :exec
+DELETE FROM app_passwords_user_credentials
+WHERE user_id = $1 AND name = $2
 `
 
-type UpdateCredentialParams struct {
-	Value       string
-	Description string
+type DeleteUserCredentialParams struct {
+	UserID string
+	Name   string
+}
+
+func (q *Queries) DeleteUserCredential(ctx context.Context, arg DeleteUserCredentialParams) error {
+	_, err := q.db.Exec(ctx, deleteUserCredential, arg.UserID, arg.Name)
+	return err
+}
+
+const deleteWorkspaceCredential = `-- name: DeleteWorkspaceCredential :exec
+DELETE FROM app_passwords_workspace_credentials
+WHERE workspace_id = $1 AND name = $2
+`
+
+type DeleteWorkspaceCredentialParams struct {
+	WorkspaceID string
 	Name        string
 }
 
-func (q *Queries) UpdateCredential(ctx context.Context, arg UpdateCredentialParams) error {
-	_, err := q.db.Exec(ctx, updateCredential, arg.Value, arg.Description, arg.Name)
+func (q *Queries) DeleteWorkspaceCredential(ctx context.Context, arg DeleteWorkspaceCredentialParams) error {
+	_, err := q.db.Exec(ctx, deleteWorkspaceCredential, arg.WorkspaceID, arg.Name)
+	return err
+}
+
+const getSystemCredential = `-- name: GetSystemCredential :one
+SELECT name, description, nonce, ciphertext, created_at, updated_at FROM app_passwords_system_credentials WHERE name = $1
+`
+
+func (q *Queries) GetSystemCredential(ctx context.Context, name string) (AppPasswordsSystemCredential, error) {
+	row := q.db.QueryRow(ctx, getSystemCredential, name)
+	var i AppPasswordsSystemCredential
+	err := row.Scan(
+		&i.Name,
+		&i.Description,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSystemDataKey = `-- name: GetSystemDataKey :one
+
+SELECT name, encrypted_data_key, created_at FROM app_passwords_system_data_key WHERE name = 'system'
+`
+
+// =====================================================================
+// System scope
+// =====================================================================
+func (q *Queries) GetSystemDataKey(ctx context.Context) (AppPasswordsSystemDataKey, error) {
+	row := q.db.QueryRow(ctx, getSystemDataKey)
+	var i AppPasswordsSystemDataKey
+	err := row.Scan(&i.Name, &i.EncryptedDataKey, &i.CreatedAt)
+	return i, err
+}
+
+const getUserCredential = `-- name: GetUserCredential :one
+SELECT user_id, name, description, nonce, ciphertext, created_at, updated_at FROM app_passwords_user_credentials
+WHERE user_id = $1 AND name = $2
+`
+
+type GetUserCredentialParams struct {
+	UserID string
+	Name   string
+}
+
+func (q *Queries) GetUserCredential(ctx context.Context, arg GetUserCredentialParams) (AppPasswordsUserCredential, error) {
+	row := q.db.QueryRow(ctx, getUserCredential, arg.UserID, arg.Name)
+	var i AppPasswordsUserCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.Name,
+		&i.Description,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserDataKey = `-- name: GetUserDataKey :one
+
+SELECT user_id, encrypted_data_key, created_at FROM app_passwords_user_data_keys WHERE user_id = $1
+`
+
+// =====================================================================
+// User scope
+// =====================================================================
+func (q *Queries) GetUserDataKey(ctx context.Context, userID string) (AppPasswordsUserDataKey, error) {
+	row := q.db.QueryRow(ctx, getUserDataKey, userID)
+	var i AppPasswordsUserDataKey
+	err := row.Scan(&i.UserID, &i.EncryptedDataKey, &i.CreatedAt)
+	return i, err
+}
+
+const getWorkspaceCredential = `-- name: GetWorkspaceCredential :one
+SELECT workspace_id, name, description, nonce, ciphertext, created_at, updated_at FROM app_passwords_workspace_credentials
+WHERE workspace_id = $1 AND name = $2
+`
+
+type GetWorkspaceCredentialParams struct {
+	WorkspaceID string
+	Name        string
+}
+
+func (q *Queries) GetWorkspaceCredential(ctx context.Context, arg GetWorkspaceCredentialParams) (AppPasswordsWorkspaceCredential, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceCredential, arg.WorkspaceID, arg.Name)
+	var i AppPasswordsWorkspaceCredential
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getWorkspaceDataKey = `-- name: GetWorkspaceDataKey :one
+
+SELECT workspace_id, encrypted_data_key, created_at FROM app_passwords_workspace_data_keys WHERE workspace_id = $1
+`
+
+// =====================================================================
+// Workspace scope
+// =====================================================================
+func (q *Queries) GetWorkspaceDataKey(ctx context.Context, workspaceID string) (AppPasswordsWorkspaceDataKey, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceDataKey, workspaceID)
+	var i AppPasswordsWorkspaceDataKey
+	err := row.Scan(&i.WorkspaceID, &i.EncryptedDataKey, &i.CreatedAt)
+	return i, err
+}
+
+const listSystemCredentials = `-- name: ListSystemCredentials :many
+SELECT name, description, created_at, updated_at
+FROM app_passwords_system_credentials
+ORDER BY name
+`
+
+type ListSystemCredentialsRow struct {
+	Name        string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// Metadata only, no nonce/ciphertext. Use GetSystemCredential to read one value.
+func (q *Queries) ListSystemCredentials(ctx context.Context) ([]ListSystemCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, listSystemCredentials)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSystemCredentialsRow
+	for rows.Next() {
+		var i ListSystemCredentialsRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserCredentials = `-- name: ListUserCredentials :many
+SELECT user_id, name, description, created_at, updated_at
+FROM app_passwords_user_credentials
+WHERE user_id = $1
+ORDER BY name
+`
+
+type ListUserCredentialsRow struct {
+	UserID      string
+	Name        string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (q *Queries) ListUserCredentials(ctx context.Context, userID string) ([]ListUserCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, listUserCredentials, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserCredentialsRow
+	for rows.Next() {
+		var i ListUserCredentialsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkspaceCredentials = `-- name: ListWorkspaceCredentials :many
+SELECT workspace_id, name, description, created_at, updated_at
+FROM app_passwords_workspace_credentials
+WHERE workspace_id = $1
+ORDER BY name
+`
+
+type ListWorkspaceCredentialsRow struct {
+	WorkspaceID string
+	Name        string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (q *Queries) ListWorkspaceCredentials(ctx context.Context, workspaceID string) ([]ListWorkspaceCredentialsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceCredentials, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspaceCredentialsRow
+	for rows.Next() {
+		var i ListWorkspaceCredentialsRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertSystemCredential = `-- name: UpsertSystemCredential :exec
+INSERT INTO app_passwords_system_credentials (name, description, nonce, ciphertext)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (name) DO UPDATE
+SET description = EXCLUDED.description,
+    nonce       = EXCLUDED.nonce,
+    ciphertext  = EXCLUDED.ciphertext,
+    updated_at  = now()
+`
+
+type UpsertSystemCredentialParams struct {
+	Name        string
+	Description string
+	Nonce       []byte
+	Ciphertext  []byte
+}
+
+func (q *Queries) UpsertSystemCredential(ctx context.Context, arg UpsertSystemCredentialParams) error {
+	_, err := q.db.Exec(ctx, upsertSystemCredential,
+		arg.Name,
+		arg.Description,
+		arg.Nonce,
+		arg.Ciphertext,
+	)
+	return err
+}
+
+const upsertSystemDataKey = `-- name: UpsertSystemDataKey :exec
+INSERT INTO app_passwords_system_data_key (encrypted_data_key)
+VALUES ($1)
+ON CONFLICT (name) DO UPDATE
+SET encrypted_data_key = EXCLUDED.encrypted_data_key
+`
+
+func (q *Queries) UpsertSystemDataKey(ctx context.Context, encryptedDataKey []byte) error {
+	_, err := q.db.Exec(ctx, upsertSystemDataKey, encryptedDataKey)
+	return err
+}
+
+const upsertUserCredential = `-- name: UpsertUserCredential :exec
+INSERT INTO app_passwords_user_credentials (user_id, name, description, nonce, ciphertext)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, name) DO UPDATE
+SET description = EXCLUDED.description,
+    nonce       = EXCLUDED.nonce,
+    ciphertext  = EXCLUDED.ciphertext,
+    updated_at  = now()
+`
+
+type UpsertUserCredentialParams struct {
+	UserID      string
+	Name        string
+	Description string
+	Nonce       []byte
+	Ciphertext  []byte
+}
+
+func (q *Queries) UpsertUserCredential(ctx context.Context, arg UpsertUserCredentialParams) error {
+	_, err := q.db.Exec(ctx, upsertUserCredential,
+		arg.UserID,
+		arg.Name,
+		arg.Description,
+		arg.Nonce,
+		arg.Ciphertext,
+	)
+	return err
+}
+
+const upsertUserDataKey = `-- name: UpsertUserDataKey :exec
+INSERT INTO app_passwords_user_data_keys (user_id, encrypted_data_key)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET encrypted_data_key = EXCLUDED.encrypted_data_key
+`
+
+type UpsertUserDataKeyParams struct {
+	UserID           string
+	EncryptedDataKey []byte
+}
+
+func (q *Queries) UpsertUserDataKey(ctx context.Context, arg UpsertUserDataKeyParams) error {
+	_, err := q.db.Exec(ctx, upsertUserDataKey, arg.UserID, arg.EncryptedDataKey)
+	return err
+}
+
+const upsertWorkspaceCredential = `-- name: UpsertWorkspaceCredential :exec
+INSERT INTO app_passwords_workspace_credentials (workspace_id, name, description, nonce, ciphertext)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (workspace_id, name) DO UPDATE
+SET description = EXCLUDED.description,
+    nonce       = EXCLUDED.nonce,
+    ciphertext  = EXCLUDED.ciphertext,
+    updated_at  = now()
+`
+
+type UpsertWorkspaceCredentialParams struct {
+	WorkspaceID string
+	Name        string
+	Description string
+	Nonce       []byte
+	Ciphertext  []byte
+}
+
+func (q *Queries) UpsertWorkspaceCredential(ctx context.Context, arg UpsertWorkspaceCredentialParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkspaceCredential,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+		arg.Nonce,
+		arg.Ciphertext,
+	)
+	return err
+}
+
+const upsertWorkspaceDataKey = `-- name: UpsertWorkspaceDataKey :exec
+INSERT INTO app_passwords_workspace_data_keys (workspace_id, encrypted_data_key)
+VALUES ($1, $2)
+ON CONFLICT (workspace_id) DO UPDATE
+SET encrypted_data_key = EXCLUDED.encrypted_data_key
+`
+
+type UpsertWorkspaceDataKeyParams struct {
+	WorkspaceID      string
+	EncryptedDataKey []byte
+}
+
+func (q *Queries) UpsertWorkspaceDataKey(ctx context.Context, arg UpsertWorkspaceDataKeyParams) error {
+	_, err := q.db.Exec(ctx, upsertWorkspaceDataKey, arg.WorkspaceID, arg.EncryptedDataKey)
 	return err
 }

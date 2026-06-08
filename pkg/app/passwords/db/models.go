@@ -8,12 +8,49 @@ import (
 	"time"
 )
 
-type AppPasswordsCredential struct {
-	ID          string
+type AppPasswordsSystemCredential struct {
 	Name        string
-	Value       string
 	Description string
+	Nonce       []byte
+	Ciphertext  []byte
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	DeletedAt   *time.Time
+}
+
+type AppPasswordsSystemDataKey struct {
+	Name             string
+	EncryptedDataKey []byte
+	CreatedAt        time.Time
+}
+
+type AppPasswordsUserCredential struct {
+	UserID      string
+	Name        string
+	Description string
+	Nonce       []byte
+	Ciphertext  []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type AppPasswordsUserDataKey struct {
+	UserID           string
+	EncryptedDataKey []byte
+	CreatedAt        time.Time
+}
+
+type AppPasswordsWorkspaceCredential struct {
+	WorkspaceID string
+	Name        string
+	Description string
+	Nonce       []byte
+	Ciphertext  []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type AppPasswordsWorkspaceDataKey struct {
+	WorkspaceID      string
+	EncryptedDataKey []byte
+	CreatedAt        time.Time
 }

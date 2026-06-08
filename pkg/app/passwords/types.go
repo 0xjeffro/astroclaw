@@ -3,33 +3,26 @@ package passwords
 import (
 	"errors"
 	"time"
-
-	"astroclaw/pkg/app/passwords/db"
 )
 
 var (
 	ErrNotFound = errors.New("credential not found")
 )
 
+// Credential is the decrypted form of a stored credential.
 type Credential struct {
-	ID          string
 	Name        string
+	Description string
 	Value       string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// CredentialMetadata is what List endpoints return: no plaintext, no
+// ciphertext, just the user-facing metadata.
+type CredentialMetadata struct {
+	Name        string
 	Description string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	DeletedAt   *time.Time
-}
-
-// CredentialFromDB constructs a passwords.Credential from a db.AppPasswordsCredential.
-func CredentialFromDB(c db.AppPasswordsCredential) *Credential {
-	return &Credential{
-		ID:          c.ID,
-		Name:        c.Name,
-		Value:       c.Value,
-		Description: c.Description,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
-		DeletedAt:   c.DeletedAt,
-	}
 }

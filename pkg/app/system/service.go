@@ -9,12 +9,35 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Service struct {
-	queries *db.Queries
+// DataKeyProvisioner provisions an encryption data key for a newly created
+// workspace or user, so the passwords app can later encrypt credentials
+// scoped to that entity. Implemented by *passwords.Service.
+//
+// system declares this interface (rather than importing passwords) to keep
+// the dependency direction one-way: orchestration code wires passwords
+// into system, but the passwords package never needs to know about system.
+type DataKeyProvisioner interface {
+	ProvisionWorkspaceDataKey(ctx context.Context, workspaceID string) error
+	ProvisionUserDataKey(ctx context.Context, userID string) error
 }
 
-func NewService(pool *pgxpool.Pool) *Service {
-	return &Service{queries: db.New(pool)}
+type Service struct {
+	queries     *db.Queries
+	provisioner DataKeyProvisioner
+}
+
+// NewService returns a system Service. provisioner is called after a
+// workspace or user is created, in a follow-up DB write, to ensure the
+// passwords app's data key exists before any credential is stored.
+//
+// TODO: thread the provisioner call through the same DB transaction as
+// the workspace/user insert, so a provisioning failure rolls back the
+// entity creation.
+func NewService(pool *pgxpool.Pool, provisioner DataKeyProvisioner) *Service {
+	return &Service{
+		queries:     db.New(pool),
+		provisioner: provisioner,
+	}
 }
 
 // Users
@@ -28,6 +51,11 @@ func (svc *Service) CreateUser(ctx context.Context, email, name, role string) (*
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
+
+	if err := svc.provisioner.ProvisionUserDataKey(ctx, u.ID); err != nil {
+		return nil, fmt.Errorf("provision data key for user %q: %w", u.ID, err)
+	}
+
 	return UserFromDB(u), nil
 }
 
@@ -73,6 +101,9 @@ func (svc *Service) CreateWorkspace(ctx context.Context, name string) (*Workspac
 	w, err := svc.queries.CreateWorkspace(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("create workspace: %w", err)
+	}
+	if err := svc.provisioner.ProvisionWorkspaceDataKey(ctx, w.ID); err != nil {
+		return nil, fmt.Errorf("provision data key for workspace %q: %w", w.ID, err)
 	}
 	return WorkspaceFromDB(w), nil
 }
