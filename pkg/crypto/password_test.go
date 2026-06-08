@@ -1,0 +1,246 @@
+package crypto
+
+import (
+	"regexp"
+	"strings"
+	"testing"
+)
+
+func TestCreateHash(t *testing.T) {
+	hashRX, err := regexp.Compile(`^\$argon2id\$v=19\$m=65536,t=1,p=[0-9]{1,4}\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hash1, err := CreateHash("pa$$word", DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hashRX.MatchString(hash1) {
+		t.Errorf("hash %q not in correct format", hash1)
+	}
+
+	hash2, err := CreateHash("pa$$word", DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Compare(hash1, hash2) == 0 {
+		t.Error("hashes must be unique")
+	}
+}
+
+func TestCreateHashBytes(t *testing.T) {
+	hashRX, err := regexp.Compile(`^\$argon2id\$v=19\$m=65536,t=1,p=[0-9]{1,4}\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	password, err := generateRandomBytes(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hash1, err := CreateHash(password, DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hashRX.MatchString(hash1) {
+		t.Errorf("hash %q not in correct format", hash1)
+	}
+
+	hash2, err := CreateHash(password, DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Compare(hash1, hash2) == 0 {
+		t.Error("hashes must be unique")
+	}
+}
+
+func TestComparePasswordAndHash(t *testing.T) {
+	hash, err := CreateHash("pa$$word", DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	match, err := ComparePasswordAndHash("pa$$word", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !match {
+		t.Error("expected password and hash to match")
+	}
+
+	match, err = ComparePasswordAndHash("otherPa$$word", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if match {
+		t.Error("expected password and hash to not match")
+	}
+}
+
+const bugHash = "$argon2id$v=19$m=65536,t=1,p=2$UDk0zEuIzbt0x3bwkf8Bgw$ihSfHWUJpTgDvNWiojrgcN4E0pJdUVmqCEdRZesx9tE"
+
+func TestComparePasswordAndHashBytes(t *testing.T) {
+	password, err := generateRandomBytes(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := CreateHash(password, DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	match, err := ComparePasswordAndHash(password, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !match {
+		t.Error("expected password and hash to match")
+	}
+
+	otherPassword, err := generateRandomBytes(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	match, err = ComparePasswordAndHash(otherPassword, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if match {
+		t.Error("expected password and hash to not match")
+	}
+}
+
+func TestDecodeHash(t *testing.T) {
+	hash, err := CreateHash("pa$$word", DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	params, _, _, err := DecodeHash(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *params != *DefaultParams {
+		t.Fatalf("expected %#v got %#v", *DefaultParams, *params)
+	}
+
+	for _, c := range []string{"v", "m", "t", "p"} {
+		re := regexp.MustCompile("([$,])(" + c + "=[^$,]+)")
+		_, _, _, err = DecodeHash(re.ReplaceAllString(bugHash, "$1JUNK+$2"))
+		if err == nil {
+			t.Fatalf("leading %s key junk should fail decode", c)
+		}
+		_, _, _, err = DecodeHash(re.ReplaceAllString(bugHash, "$1$2+JUNK"))
+		if err == nil {
+			t.Fatalf("trailing %s value junk should fail decode", c)
+		}
+	}
+
+	i := strings.LastIndex(bugHash, "$")
+	_, _, _, err = DecodeHash(bugHash[:i] + "\r$\n" + bugHash[i+1:])
+	if err == nil {
+		t.Fatalf(`\r and \n in base64 data should fail decode`)
+	}
+}
+
+func TestDecodeHashBytes(t *testing.T) {
+	password, err := generateRandomBytes(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := CreateHash(password, DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	params, _, _, err := DecodeHash(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *params != *DefaultParams {
+		t.Fatalf("expected %#v got %#v", *DefaultParams, *params)
+	}
+}
+
+func TestCheckHash(t *testing.T) {
+	hash, err := CreateHash("pa$$word", DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, params, err := CheckHash("pa$$word", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected password to match")
+	}
+	if *params != *DefaultParams {
+		t.Fatalf("expected %#v got %#v", *DefaultParams, *params)
+	}
+}
+
+func TestCheckHashBytes(t *testing.T) {
+	password, err := generateRandomBytes(16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hash, err := CreateHash(password, DefaultParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, params, err := CheckHash(password, hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected password to match")
+	}
+	if *params != *DefaultParams {
+		t.Fatalf("expected %#v got %#v", *DefaultParams, *params)
+	}
+}
+
+func TestStrictDecoding(t *testing.T) {
+	ok, _, err := CheckHash("bug", bugHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected password to match")
+	}
+
+	// changed one last character of the hash
+	ok, _, err = CheckHash("bug", bugHash[:len(bugHash)-1]+"F")
+	if err == nil {
+		t.Fatal("Hash validation should fail")
+	}
+
+	if ok {
+		t.Fatal("Hash validation should fail")
+	}
+}
+
+func TestVariant(t *testing.T) {
+	// Hash contains wrong variant
+	_, _, err := CheckHash("pa$$word", "$argon2i$v=19$m=65536,t=1,p=2$mFe3kxhovyEByvwnUtr0ow$nU9AqnoPfzMOQhCHa9BDrQ+4bSfj69jgtvGu/2McCxU")
+	if err != ErrIncompatibleVariant {
+		t.Fatalf("expected error %s", ErrIncompatibleVariant)
+	}
+}
