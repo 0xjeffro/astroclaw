@@ -2,7 +2,6 @@ package main
 
 import (
 	"astroclaw/pkg/app/chat"
-	"astroclaw/pkg/app/passwords"
 	"astroclaw/pkg/app/settings"
 	"astroclaw/pkg/app/system"
 	"context"
@@ -21,7 +20,6 @@ var (
 	svc         *chat.Service
 	settingsSvc *settings.Service
 	systemSvc   *system.Service
-	apiKey      string
 )
 
 // init runs once when Lambda cold-starts. Connects to DSQL and sets up
@@ -38,13 +36,13 @@ func init() {
 	}
 
 	// Read API authentication key.
-	pwSvc := passwords.NewService(pool)
-	apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
-	if err != nil {
-		log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
-	} else {
-		apiKey = apiKeyCred.Value
-	}
+	//pwSvc := passwords.NewService(pool)
+	//apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
+	//if err != nil {
+	//	log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
+	//} else {
+	//	apiKey = apiKeyCred.Value
+	//}
 
 	settingsSvc = settings.NewService(pool)
 	systemSvc = system.NewService(pool)
@@ -54,9 +52,9 @@ func init() {
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	if apiKey != "" && req.Headers["x-api-key"] != apiKey {
-		return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-	}
+	//if apiKey != "" && req.Headers["x-api-key"] != apiKey {
+	//	return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	//}
 
 	path := req.RequestContext.HTTP.Path
 	method := req.RequestContext.HTTP.Method

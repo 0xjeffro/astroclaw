@@ -1,7 +1,6 @@
 package main
 
 import (
-	"astroclaw/pkg/app/system"
 	"bytes"
 	"context"
 	"fmt"
@@ -11,32 +10,22 @@ import (
 	"strings"
 
 	"astroclaw/pkg/app/skills"
+	"astroclaw/pkg/app/system"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // seedDefaultSkills reads skill directories bundled with the Lambda,
 // uploads each file to S3 under skills/{author}/{name}/{version}/...,
 // and writes a per-workspace installation record to DSQL.
 // Skips skills that already exist in the database.
-func seedDefaultSkills(ctx context.Context, pool *pgxpool.Pool) error {
+func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *skills.Service, s3Client *s3.Client) error {
 	bucket := os.Getenv("SKILLS_BUCKET")
 	if bucket == "" {
 		log.Println("SKILLS_BUCKET not set, skipping skill seeding")
 		return nil
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("load AWS config: %w", err)
-	}
-	s3Client := s3.NewFromConfig(awsCfg)
-
-	skillsSvc := skills.NewService(pool)
-
-	sysSvc := system.NewService(pool)
 	// Find the default workspace (the admin's first workspace).
 	admin, err := sysSvc.GetAdmin(ctx)
 	if err != nil {

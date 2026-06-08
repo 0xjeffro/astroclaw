@@ -9,6 +9,7 @@ import (
 	"astroclaw/pkg/app/settings"
 	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
+	"astroclaw/pkg/crypto"
 	"astroclaw/pkg/provider"
 	"astroclaw/pkg/tool"
 	toolskills "astroclaw/pkg/tool/skills"
@@ -28,6 +29,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
@@ -36,7 +38,6 @@ var (
 	svc         *chat.Service
 	systemSvc   *system.Service
 	apigwClient *apigatewaymanagementapi.Client
-	apiKey      string
 )
 
 // Init runs once when Lambda cold-starts. Connects to DSQL, sets up
@@ -65,19 +66,24 @@ func init() {
 	})
 
 	// Read credentials.
-	pwSvc := passwords.NewService(pool)
+	km := crypto.NewAWSKMSKeyManager(kms.NewFromConfig(awsCfg), os.Getenv("PASSWORDS_KMS_KEY_ID"))
+	pwSvc := passwords.NewService(pool, km)
 
-	llmCred, err := pwSvc.GetCredentialByName(ctx, "anthropic-api-key")
+	// TODO: Here we should design a more flexible way to obtain the LLM API key.
+	// For exp, if anti's is not set, fall back to openai. This should be accompanied by some config files to set how the fallback should be handled.
+	// Another point is, it the user has configured their own key, it should take priority over the user's own.
+	// Furthermore, if the user's key is down, we should fall back to the system's key instead of just erroring out.
+	llmCred, err := pwSvc.GetSystemCredential(ctx, "anthropic-api-key")
 	if err != nil {
 		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
 	}
-
-	apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
-	if err != nil {
-		log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
-	} else {
-		apiKey = apiKeyCred.Value
-	}
+	//
+	//apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
+	//if err != nil {
+	//	log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
+	//} else {
+	//	apiKey = apiKeyCred.Value
+	//}
 
 	var p provider.Provider
 	model := os.Getenv("MODEL_NAME")
@@ -194,9 +200,9 @@ func buildPrompt(ctx context.Context, workspaceID string, agentProfile *agents.A
 }
 
 func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	if apiKey != "" && req.Headers["x-api-key"] != apiKey {
-		return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-	}
+	//if apiKey != "" && req.Headers["x-api-key"] != apiKey {
+	//	return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	//}
 
 	// Extract session ID from path: /sessions/{id}/reply
 	path := req.RequestContext.HTTP.Path

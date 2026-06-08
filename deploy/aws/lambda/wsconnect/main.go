@@ -25,7 +25,6 @@ import (
 	"log"
 	"os"
 
-	"astroclaw/pkg/app/passwords"
 	"astroclaw/pkg/app/system"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -48,25 +47,29 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	pwSvc := passwords.NewService(pool)
-	apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
-	if err != nil {
-		log.Println("warning: no api-key in credentials table, all connections will be allowed")
-	} else {
-		apiKey = apiKeyCred.Value
-	}
+	// TODO: replace this admin-only api-key with per-user API tokens stored
+	// in app_system_api_tokens. tokens hash → user_id lookup or JWT ?
+	// For now we keep no auth at all!!!!
+	//
+	// var apiKey string  // intentionally removed
+	//apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
+	//if err != nil {
+	//	log.Println("warning: no api-key in credentials table, all connections will be allowed")
+	//} else {
+	//	apiKey = apiKeyCred.Value
+	//}
 
 	systemSvc = system.NewService(pool)
 }
 
 func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
 	// Authenticate.
-	if apiKey != "" {
-		clientKey := req.QueryStringParameters["api_key"]
-		if clientKey != apiKey {
-			return events.APIGatewayProxyResponse{StatusCode: 403}, nil
-		}
-	}
+	//if apiKey != "" {
+	//	clientKey := req.QueryStringParameters["api_key"]
+	//	if clientKey != apiKey {
+	//		return events.APIGatewayProxyResponse{StatusCode: 403}, nil
+	//	}
+	//}
 
 	// Extract user_id and workspace_id from query string.
 	// TODO: replace query params with JWT-based auth so the server can verify
