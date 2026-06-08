@@ -6,6 +6,7 @@ import (
 
 	"astroclaw/pkg/app/system/db"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -13,15 +14,21 @@ import (
 // workspace or user, so the passwords app can later encrypt credentials
 // scoped to that entity. Implemented by *passwords.Service.
 //
+// Both methods accept a pgx.Tx so the data key insert can share the same
+// DB transaction as the workspace or user insert. If provisioning fails
+// the whole transaction rolls back, leaving no orphan workspace/user
+// without a data key.
+//
 // system declares this interface (rather than importing passwords) to keep
 // the dependency direction one-way: orchestration code wires passwords
 // into system, but the passwords package never needs to know about system.
 type DataKeyProvisioner interface {
-	ProvisionWorkspaceDataKey(ctx context.Context, workspaceID string) error
-	ProvisionUserDataKey(ctx context.Context, userID string) error
+	ProvisionWorkspaceDataKey(ctx context.Context, tx pgx.Tx, workspaceID string) error
+	ProvisionUserDataKey(ctx context.Context, tx pgx.Tx, userID string) error
 }
 
 type Service struct {
+	pool        *pgxpool.Pool
 	queries     *db.Queries
 	provisioner DataKeyProvisioner
 }
@@ -39,12 +46,11 @@ func WithProvisioner(p DataKeyProvisioner) Option {
 // Callers that create users or workspaces must pass WithProvisioner so
 // the corresponding passwords data key is created in the same flow.
 // Lambdas that only read or delete (e.g. wsdisconnect) can omit it.
-//
-// TODO: thread the provisioner call through the same DB transaction as
-// the workspace/user insert, so a provisioning failure rolls back the
-// entity creation.
 func NewService(pool *pgxpool.Pool, opts ...Option) *Service {
-	svc := &Service{queries: db.New(pool)}
+	svc := &Service{
+		pool:    pool,
+		queries: db.New(pool),
+	}
 	for _, opt := range opts {
 		opt(svc)
 	}
@@ -54,7 +60,14 @@ func NewService(pool *pgxpool.Pool, opts ...Option) *Service {
 // Users
 
 func (svc *Service) CreateUser(ctx context.Context, email, name, role string) (*User, error) {
-	u, err := svc.queries.CreateUser(ctx, db.CreateUserParams{
+	tx, err := svc.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := svc.queries.WithTx(tx)
+	u, err := qtx.CreateUser(ctx, db.CreateUserParams{
 		Email: email,
 		Name:  name,
 		Role:  role,
@@ -64,11 +77,14 @@ func (svc *Service) CreateUser(ctx context.Context, email, name, role string) (*
 	}
 
 	if svc.provisioner != nil {
-		if err := svc.provisioner.ProvisionUserDataKey(ctx, u.ID); err != nil {
+		if err := svc.provisioner.ProvisionUserDataKey(ctx, tx, u.ID); err != nil {
 			return nil, fmt.Errorf("provision data key for user %q: %w", u.ID, err)
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
 	return UserFromDB(u), nil
 }
 
@@ -111,14 +127,24 @@ func (svc *Service) ListUsers(ctx context.Context) ([]*User, error) {
 // Workspaces
 
 func (svc *Service) CreateWorkspace(ctx context.Context, name string) (*Workspace, error) {
-	w, err := svc.queries.CreateWorkspace(ctx, name)
+	tx, err := svc.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	qtx := svc.queries.WithTx(tx)
+	w, err := qtx.CreateWorkspace(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("create workspace: %w", err)
 	}
 	if svc.provisioner != nil {
-		if err := svc.provisioner.ProvisionWorkspaceDataKey(ctx, w.ID); err != nil {
+		if err := svc.provisioner.ProvisionWorkspaceDataKey(ctx, tx, w.ID); err != nil {
 			return nil, fmt.Errorf("provision data key for workspace %q: %w", w.ID, err)
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 	return WorkspaceFromDB(w), nil
 }

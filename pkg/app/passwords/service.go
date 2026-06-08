@@ -300,15 +300,17 @@ func (svc *Service) ProvisionSystemDataKey(ctx context.Context) error {
 }
 
 // ProvisionWorkspaceDataKey generates and wraps a data key for a new
-// workspace. Must be called from the workspace creation path, ideally
-// in the same transaction. Returns nil if the workspace already has a
-// data key (idempotent).
+// workspace, then inserts the encrypted row inside the caller's
+// transaction. Idempotent: a no-op if the workspace already has a key.
 //
-// TODO: accept a *pgx.Tx so the data key insert can share the same
-// transaction as the workspace insert. For now this runs on its own
-// connection.
-func (svc *Service) ProvisionWorkspaceDataKey(ctx context.Context, workspaceID string) error {
-	if _, err := svc.queries.GetWorkspaceDataKey(ctx, workspaceID); err == nil {
+// KMS Encrypt runs outside the DB transaction (it cannot be rolled back).
+// If the surrounding transaction later fails to commit, the wrapped key
+// produced here is simply discarded;
+func (svc *Service) ProvisionWorkspaceDataKey(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	q := svc.queries.WithTx(tx)
+
+	// TODO: add this pre-check into some precheck hook
+	if _, err := q.GetWorkspaceDataKey(ctx, workspaceID); err == nil {
 		return nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("check workspace data key: %w", err)
@@ -321,18 +323,17 @@ func (svc *Service) ProvisionWorkspaceDataKey(ctx context.Context, workspaceID s
 	if err != nil {
 		return fmt.Errorf("wrap workspace data key: %w", err)
 	}
-	return svc.queries.UpsertWorkspaceDataKey(ctx, db.UpsertWorkspaceDataKeyParams{
+	return q.UpsertWorkspaceDataKey(ctx, db.UpsertWorkspaceDataKeyParams{
 		WorkspaceID:      workspaceID,
 		EncryptedDataKey: wrapped,
 	})
 }
 
-// ProvisionUserDataKey generates and wraps a data key for a new user.
-// Idempotent like ProvisionWorkspaceDataKey.
-//
-// TODO: accept a *pgx.Tx.
-func (svc *Service) ProvisionUserDataKey(ctx context.Context, userID string) error {
-	if _, err := svc.queries.GetUserDataKey(ctx, userID); err == nil {
+// ProvisionUserDataKey is the user-scope analogue of
+// ProvisionWorkspaceDataKey; same transactional semantics.
+func (svc *Service) ProvisionUserDataKey(ctx context.Context, tx pgx.Tx, userID string) error {
+	q := svc.queries.WithTx(tx)
+	if _, err := q.GetUserDataKey(ctx, userID); err == nil {
 		return nil
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("check user data key: %w", err)
@@ -345,7 +346,7 @@ func (svc *Service) ProvisionUserDataKey(ctx context.Context, userID string) err
 	if err != nil {
 		return fmt.Errorf("wrap user data key: %w", err)
 	}
-	return svc.queries.UpsertUserDataKey(ctx, db.UpsertUserDataKeyParams{
+	return q.UpsertUserDataKey(ctx, db.UpsertUserDataKeyParams{
 		UserID:           userID,
 		EncryptedDataKey: wrapped,
 	})
