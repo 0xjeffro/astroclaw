@@ -84,16 +84,58 @@ CREATE TABLE "public"."app_notes_memory_sources" (
   "message_id" uuid NOT NULL,
   PRIMARY KEY ("memory_id", "message_id")
 );
--- Create "app_passwords_credentials" table
-CREATE TABLE "public"."app_passwords_credentials" (
-  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+-- Create "app_passwords_system_credentials" table
+CREATE TABLE "public"."app_passwords_system_credentials" (
   "name" text NOT NULL,
-  "value" text NOT NULL,
   "description" text NOT NULL DEFAULT '',
+  "nonce" bytea NOT NULL,
+  "ciphertext" bytea NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
-  "deleted_at" timestamptz NULL,
-  PRIMARY KEY ("id")
+  PRIMARY KEY ("name")
+);
+-- Create "app_passwords_system_data_key" table
+CREATE TABLE "public"."app_passwords_system_data_key" (
+  "name" text NOT NULL DEFAULT 'system',
+  "encrypted_data_key" bytea NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("name")
+);
+-- Create "app_passwords_user_credentials" table
+CREATE TABLE "public"."app_passwords_user_credentials" (
+  "user_id" uuid NOT NULL,
+  "name" text NOT NULL,
+  "description" text NOT NULL DEFAULT '',
+  "nonce" bytea NOT NULL,
+  "ciphertext" bytea NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("user_id", "name")
+);
+-- Create "app_passwords_user_data_keys" table
+CREATE TABLE "public"."app_passwords_user_data_keys" (
+  "user_id" uuid NOT NULL,
+  "encrypted_data_key" bytea NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("user_id")
+);
+-- Create "app_passwords_workspace_credentials" table
+CREATE TABLE "public"."app_passwords_workspace_credentials" (
+  "workspace_id" uuid NOT NULL,
+  "name" text NOT NULL,
+  "description" text NOT NULL DEFAULT '',
+  "nonce" bytea NOT NULL,
+  "ciphertext" bytea NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("workspace_id", "name")
+);
+-- Create "app_passwords_workspace_data_keys" table
+CREATE TABLE "public"."app_passwords_workspace_data_keys" (
+  "workspace_id" uuid NOT NULL,
+  "encrypted_data_key" bytea NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("workspace_id")
 );
 -- Create "app_settings_system" table
 CREATE TABLE "public"."app_settings_system" (
