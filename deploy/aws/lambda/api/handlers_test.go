@@ -1,0 +1,337 @@
+// Tests for the chi-based API router. They drive the router via
+// httptest.NewRecorder + httptest.NewRequest and use in-memory fake services,
+// so no DSQL connection is required.
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"astroclaw/pkg/app/chat"
+	"astroclaw/pkg/app/settings"
+	"astroclaw/pkg/app/system"
+)
+
+// --- fakes -----------------------------------------------------------------
+
+// fakeChat is an in-memory chatService that records the arguments it was
+// called with and returns preconfigured results/errors.
+type fakeChat struct {
+	createCalled struct {
+		workspaceID, userID, title string
+		agentIDs                   []string
+	}
+	listWorkspaceID string
+	getID, deleteID string
+	createSession   *chat.Session
+	listResult      []*chat.Session
+	getResult       *chat.Session
+	createErr       error
+	listErr         error
+	getErr          error
+	softDeleteErr   error
+}
+
+func (f *fakeChat) CreateSessionInWorkspace(_ context.Context, workspaceID, userID string, agentIDs []string, title string) (*chat.Session, error) {
+	f.createCalled.workspaceID = workspaceID
+	f.createCalled.userID = userID
+	f.createCalled.agentIDs = agentIDs
+	f.createCalled.title = title
+	return f.createSession, f.createErr
+}
+
+func (f *fakeChat) ListSessionsByWorkspace(_ context.Context, workspaceID string) ([]*chat.Session, error) {
+	f.listWorkspaceID = workspaceID
+	return f.listResult, f.listErr
+}
+
+func (f *fakeChat) GetSession(_ context.Context, id string) (*chat.Session, error) {
+	f.getID = id
+	return f.getResult, f.getErr
+}
+
+func (f *fakeChat) SoftDeleteSession(_ context.Context, id string) error {
+	f.deleteID = id
+	return f.softDeleteErr
+}
+
+// fakeSettings is an in-memory settingsService for handler tests.
+type fakeSettings struct {
+	getSysName                               string
+	getWsWorkspace, getWsName                string
+	upsertWorkspace, upsertName, upsertValue string
+	sysResult                                *settings.SystemSetting
+	wsResult                                 *settings.WorkspaceSetting
+	sysErr, wsErr, upsertErr                 error
+}
+
+func (f *fakeSettings) GetSystemSetting(_ context.Context, name string) (*settings.SystemSetting, error) {
+	f.getSysName = name
+	return f.sysResult, f.sysErr
+}
+
+func (f *fakeSettings) GetWorkspaceSetting(_ context.Context, workspaceID, name string) (*settings.WorkspaceSetting, error) {
+	f.getWsWorkspace = workspaceID
+	f.getWsName = name
+	return f.wsResult, f.wsErr
+}
+
+func (f *fakeSettings) UpsertWorkspaceSetting(_ context.Context, workspaceID, name, value string) error {
+	f.upsertWorkspace = workspaceID
+	f.upsertName = name
+	f.upsertValue = value
+	return f.upsertErr
+}
+
+// fakeSystem is an in-memory systemService for handler tests.
+type fakeSystem struct {
+	listUserID string
+	admin      *system.User
+	wsList     []*system.Workspace
+	adminErr   error
+	listErr    error
+}
+
+func (f *fakeSystem) GetAdmin(_ context.Context) (*system.User, error) {
+	return f.admin, f.adminErr
+}
+
+func (f *fakeSystem) ListWorkspacesForUser(_ context.Context, userID string) ([]*system.Workspace, error) {
+	f.listUserID = userID
+	return f.wsList, f.listErr
+}
+
+// --- helpers ---------------------------------------------------------------
+
+// do builds a request (JSON-encoding body when non-nil), serves it through
+// the handler, and returns the recorded response.
+func do(t *testing.T, h http.Handler, method, target string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var r *http.Request
+	if body != nil {
+		buf, _ := json.Marshal(body)
+		r = httptest.NewRequest(method, target, bytes.NewReader(buf))
+		r.Header.Set("Content-Type", "application/json")
+	} else {
+		r = httptest.NewRequest(method, target, nil)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+// --- tests -----------------------------------------------------------------
+
+func TestCreateSessionInWorkspace(t *testing.T) {
+	chatSvc := &fakeChat{createSession: &chat.Session{ID: "s1", WorkspaceID: "ws1"}}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	body := map[string]any{
+		"user_id":   "u1",
+		"agent_ids": []string{"a1", "a2"},
+		"title":     "hello",
+	}
+	w := do(t, r, http.MethodPost, "/workspaces/ws1/sessions", body)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	if chatSvc.createCalled.workspaceID != "ws1" || chatSvc.createCalled.userID != "u1" ||
+		chatSvc.createCalled.title != "hello" || len(chatSvc.createCalled.agentIDs) != 2 {
+		t.Fatalf("unexpected service args: %+v", chatSvc.createCalled)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected json content-type, got %q", ct)
+	}
+}
+
+func TestCreateSessionInvalidJSON(t *testing.T) {
+	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
+	req := httptest.NewRequest(http.MethodPost, "/workspaces/ws1/sessions", strings.NewReader("{not-json"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestListSessions(t *testing.T) {
+	chatSvc := &fakeChat{listResult: []*chat.Session{{ID: "s1"}, {ID: "s2"}}}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions", nil)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if chatSvc.listWorkspaceID != "ws1" {
+		t.Errorf("expected workspaceID=ws1, got %q", chatSvc.listWorkspaceID)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("expected 2 sessions, got %d", len(got))
+	}
+}
+
+func TestGetSession(t *testing.T) {
+	chatSvc := &fakeChat{getResult: &chat.Session{ID: "abc"}}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/abc", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if chatSvc.getID != "abc" {
+		t.Errorf("expected sessionID=abc, got %q", chatSvc.getID)
+	}
+}
+
+func TestGetSessionNotFound(t *testing.T) {
+	chatSvc := &fakeChat{getErr: chat.ErrNotFound}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/missing", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestGetSessionInternalError(t *testing.T) {
+	chatSvc := &fakeChat{getErr: errors.New("boom")}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	// statusForError falls back to the call-site default for unknown errors,
+	// which for getSession is 404 (matches old behavior).
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/x", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 fallback, got %d", w.Code)
+	}
+}
+
+func TestDeleteSession(t *testing.T) {
+	chatSvc := &fakeChat{}
+	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodDelete, "/workspaces/ws1/sessions/xyz", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if chatSvc.deleteID != "xyz" {
+		t.Errorf("expected deleteID=xyz, got %q", chatSvc.deleteID)
+	}
+}
+
+func TestGetSystemSetting(t *testing.T) {
+	settingsSvc := &fakeSettings{sysResult: &settings.SystemSetting{Name: "k", Value: "v"}}
+	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/settings/k", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if settingsSvc.getSysName != "k" {
+		t.Errorf("expected name=k, got %q", settingsSvc.getSysName)
+	}
+}
+
+func TestGetWorkspaceSetting(t *testing.T) {
+	settingsSvc := &fakeSettings{wsResult: &settings.WorkspaceSetting{WorkspaceID: "ws1", Name: "k", Value: "v"}}
+	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/settings/k", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if settingsSvc.getWsWorkspace != "ws1" || settingsSvc.getWsName != "k" {
+		t.Errorf("unexpected args: ws=%q name=%q", settingsSvc.getWsWorkspace, settingsSvc.getWsName)
+	}
+}
+
+func TestUpsertWorkspaceSetting(t *testing.T) {
+	settingsSvc := &fakeSettings{}
+	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{})
+
+	w := do(t, r, http.MethodPut, "/workspaces/ws1/settings/k", map[string]string{"value": "newval"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if settingsSvc.upsertWorkspace != "ws1" || settingsSvc.upsertName != "k" || settingsSvc.upsertValue != "newval" {
+		t.Errorf("unexpected upsert args: %+v", settingsSvc)
+	}
+}
+
+func TestGetAdmin(t *testing.T) {
+	systemSvc := &fakeSystem{admin: &system.User{ID: "u-admin"}}
+	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc)
+
+	w := do(t, r, http.MethodGet, "/users/admin", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestListUserWorkspaces(t *testing.T) {
+	systemSvc := &fakeSystem{wsList: []*system.Workspace{{ID: "ws1"}}}
+	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc)
+
+	w := do(t, r, http.MethodGet, "/users/u1/workspaces", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if systemSvc.listUserID != "u1" {
+		t.Errorf("expected userID=u1, got %q", systemSvc.listUserID)
+	}
+}
+
+// "/users/admin" must take precedence over "/users/{userID}/workspaces"
+// (it has different path shapes, but worth pinning down explicitly).
+func TestUsersAdminPrecedence(t *testing.T) {
+	systemSvc := &fakeSystem{admin: &system.User{ID: "u-admin"}}
+	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc)
+
+	w := do(t, r, http.MethodGet, "/users/admin", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin route returned %d", w.Code)
+	}
+	if systemSvc.listUserID != "" {
+		t.Errorf("listUserWorkspaces should not be called; got userID=%q", systemSvc.listUserID)
+	}
+}
+
+func TestUnknownRouteReturns404(t *testing.T) {
+	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/totally-unknown", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestUnknownWorkspaceSubroute(t *testing.T) {
+	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
+
+	w := do(t, r, http.MethodGet, "/workspaces/ws1/whatever", nil)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestMethodNotAllowed(t *testing.T) {
+	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
+
+	// PATCH on /users/admin is not registered; chi returns 405.
+	w := do(t, r, http.MethodPatch, "/users/admin", nil)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
