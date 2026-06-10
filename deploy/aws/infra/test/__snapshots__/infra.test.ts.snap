@@ -3,6 +3,14 @@
 exports[`snapshot 1`] = `
 {
   "Conditions": {
+    "ShouldGenerateAdminPassword": {
+      "Fn::Equals": [
+        {
+          "Ref": "GenerateAdminPassword",
+        },
+        "true",
+      ],
+    },
     "ShouldGenerateApiKey": {
       "Fn::Equals": [
         {
@@ -35,6 +43,11 @@ exports[`snapshot 1`] = `
           ],
         ],
       },
+    },
+    "GeneratedAdminPassword": {
+      "Condition": "ShouldGenerateAdminPassword",
+      "Description": "SAVE THIS NOW. Initial admin password for the seeded admin user; only shown on this deploy.",
+      "Value": "2fckBzIy5ZuNonlcsZYU9utTOut5Lki_",
     },
     "GeneratedApiKey": {
       "Condition": "ShouldGenerateApiKey",
@@ -91,6 +104,15 @@ exports[`snapshot 1`] = `
       "Default": "/cdk-bootstrap/hnb659fds/version",
       "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
       "Type": "AWS::SSM::Parameter::Value<String>",
+    },
+    "GenerateAdminPassword": {
+      "AllowedValues": [
+        "true",
+        "false",
+      ],
+      "Default": "false",
+      "Description": "ALWAYS pass explicitly. true = generate a new admin password (overwrites existing). false = keep existing.",
+      "Type": "String",
     },
     "GenerateApiKey": {
       "AllowedValues": [
@@ -404,6 +426,13 @@ exports[`snapshot 1`] = `
               "Fn::GetAtt": [
                 "DsqlCluster",
                 "Endpoint",
+              ],
+            },
+            "GENERATED_ADMIN_PASSWORD": {
+              "Fn::If": [
+                "ShouldGenerateAdminPassword",
+                "2fckBzIy5ZuNonlcsZYU9utTOut5Lki_",
+                "",
               ],
             },
             "GENERATED_API_KEY": {

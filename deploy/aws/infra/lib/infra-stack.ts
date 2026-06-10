@@ -51,6 +51,25 @@ export class InfraStack extends cdk.Stack {
       expression: cdk.Fn.conditionEquals(generateApiKey.valueAsString, 'true'),
     });
 
+    // Initial admin password. Same explicit-parameter convention as
+    // GenerateApiKey above. 24 bytes of crypto/rand encoded as base64url
+    // gives a ~32-char URL-safe string with 192 bits of entropy.
+    //
+    // First deploy: --parameters GenerateAdminPassword=true
+    // Subsequent deploys: --parameters GenerateAdminPassword=false
+    const generateAdminPassword = new cdk.CfnParameter(this, 'GenerateAdminPassword', {
+      type: 'String',
+      default: 'false',
+      allowedValues: ['true', 'false'],
+      description: 'ALWAYS pass explicitly. true = generate a new admin password (overwrites existing). false = keep existing.',
+    });
+
+    const generatedAdminPassword = crypto.randomBytes(24).toString('base64url');
+
+    const shouldGenerateAdminPassword = new cdk.CfnCondition(this, 'ShouldGenerateAdminPassword', {
+      expression: cdk.Fn.conditionEquals(generateAdminPassword.valueAsString, 'true'),
+    });
+
     // CDK DSQL Doc: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_dsql.CfnCluster.html
     // CloudFormation DSQL Doc: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dsql-cluster.html
     const cluster = new dsql.CfnCluster(this, 'DsqlCluster', {
@@ -339,6 +358,9 @@ export class InfraStack extends cdk.Stack {
         GENERATED_API_KEY: cdk.Fn.conditionIf(
           'ShouldGenerateApiKey', generatedApiKey, '',
         ).toString(),
+        GENERATED_ADMIN_PASSWORD: cdk.Fn.conditionIf(
+          'ShouldGenerateAdminPassword', generatedAdminPassword, '',
+        ).toString(),
         SKILLS_BUCKET: skillsBucket.bucketName,
         PASSWORDS_KMS_KEY_ID: passwordsKey.keyArn,
       },
@@ -431,6 +453,12 @@ export class InfraStack extends cdk.Stack {
       value: generatedApiKey,
       description: 'SAVE THIS NOW. Use it in the x-api-key header for all API requests.',
       condition: shouldGenerateApiKey
+    });
+
+    new cdk.CfnOutput(this, 'GeneratedAdminPassword', {
+      value: generatedAdminPassword,
+      description: 'SAVE THIS NOW. Initial admin password for the seeded admin user; only shown on this deploy.',
+      condition: shouldGenerateAdminPassword
     });
   }
 }

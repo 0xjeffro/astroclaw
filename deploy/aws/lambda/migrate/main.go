@@ -268,19 +268,32 @@ func seedSystemDataKey(ctx context.Context, pwSvc *passwords.Service) error {
 	return nil
 }
 
-// seedDefaultUser creates the admin user on the first deployment if none exists.
+// seedDefaultUser creates the admin user on the first deployment if none
+// exists, and (re)sets the admin password whenever a fresh value is provided
+// via GENERATED_ADMIN_PASSWORD. CDK only populates that env var when the
+// stack is deployed with GenerateAdminPassword=true; on other deploys it is
+// empty and we leave any existing password untouched.
 func seedDefaultUser(ctx context.Context, svc *system.Service) error {
-	if _, err := svc.GetAdmin(ctx); err == nil {
-		log.Println("admin user already exists, skipping seed")
-		return nil
+	newPassword := os.Getenv("GENERATED_ADMIN_PASSWORD")
+
+	admin, err := svc.GetAdmin(ctx)
+	if err != nil {
+		// TODO: The admin email here is just a place holder, need a better way to set it.
+		admin, err = svc.CreateUser(ctx, "admin@astroclaw.local", "Admin", system.RoleAdmin)
+		if err != nil {
+			return fmt.Errorf("seed admin user: %w", err)
+		}
+		log.Printf("seeded admin user: %s (%s)", admin.Name, admin.ID)
+	} else {
+		log.Println("admin user already exists, skipping user seed")
 	}
 
-	// TODO: The admin email here is just a place holder, need a better way to set it.
-	u, err := svc.CreateUser(ctx, "admin@astroclaw.local", "Admin", system.RoleAdmin)
-	if err != nil {
-		return fmt.Errorf("seed admin user: %w", err)
+	if newPassword != "" {
+		if err := svc.SetUserPassword(ctx, admin.ID, newPassword); err != nil {
+			return fmt.Errorf("set admin password: %w", err)
+		}
+		log.Printf("set admin password (length %d) for %s", len(newPassword), admin.ID)
 	}
-	log.Printf("seeded admin user: %s (%s)", u.Name, u.ID)
 
 	return nil
 }

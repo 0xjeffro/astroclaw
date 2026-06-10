@@ -122,6 +122,18 @@ test('WebSocket has $connect and $disconnect routes', () => {
   });
 });
 
+// Verifies the migrate Lambda receives the generated admin password env var.
+// This is the wiring most likely to silently break (typo in env key, missing
+// Fn.conditionIf), so we assert it directly via the construct's logical ID.
+test('Migrate Lambda wires GENERATED_ADMIN_PASSWORD', () => {
+  const template = createTemplate();
+  const lambdas = template.findResources('AWS::Lambda::Function');
+  const migrateKey = Object.keys(lambdas).find(k => k.startsWith('MigrateHandler'));
+  expect(migrateKey).toBeDefined();
+  const env = lambdas[migrateKey!].Properties.Environment.Variables;
+  expect(env).toHaveProperty('GENERATED_ADMIN_PASSWORD');
+});
+
 // Verifies WebSocket connect/disconnect Lambdas have correct timeout (10s).
 test('WebSocket Lambdas have 10s timeout', () => {
   const template = createTemplate();
