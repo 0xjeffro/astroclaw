@@ -9,6 +9,11 @@ import (
 
 var (
 	ErrNotFound = errors.New("not found")
+
+	// ErrInvalidCredentials is returned by VerifyUserPassword when the email
+	// is unknown or the password does not match. The two cases collapse into
+	// one error to avoid leaking which emails are registered.
+	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 // Platform-level roles (app_system_users.role).

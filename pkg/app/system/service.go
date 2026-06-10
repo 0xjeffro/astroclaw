@@ -2,9 +2,11 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"astroclaw/pkg/app/system/db"
+	"astroclaw/pkg/crypto"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -110,6 +112,57 @@ func (svc *Service) GetUserByEmail(ctx context.Context, email string) (*User, er
 		return nil, fmt.Errorf("user with email %q: %w", email, ErrNotFound)
 	}
 	return UserFromDB(u), nil
+}
+
+// SetUserPassword hashes plaintext with Argon2id and stores the PHC-encoded
+// result for the given user. Used both for initial password setup and for
+// password changes; the underlying query is an upsert.
+func (svc *Service) SetUserPassword(ctx context.Context, userID, plaintext string) error {
+	hash, err := crypto.CreateHash(plaintext, crypto.DefaultParams)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	if err := svc.queries.UpsertUserPasswordHash(ctx, db.UpsertUserPasswordHashParams{
+		UserID:       userID,
+		PasswordHash: hash,
+	}); err != nil {
+		return fmt.Errorf("store password hash: %w", err)
+	}
+	return nil
+}
+
+// VerifyUserPassword looks up the user by email, compares the supplied
+// plaintext against the stored Argon2id hash, and returns the matched user.
+// Unknown email and wrong password both surface as ErrInvalidCredentials.
+func (svc *Service) VerifyUserPassword(ctx context.Context, email, plaintext string) (*User, error) {
+	u, err := svc.queries.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, fmt.Errorf("lookup user by email: %w", err)
+	}
+	hash, err := svc.queries.GetUserPasswordHash(ctx, u.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, fmt.Errorf("lookup password hash: %w", err)
+	}
+	match, err := crypto.ComparePasswordAndHash(plaintext, hash)
+	if err != nil {
+		return nil, fmt.Errorf("verify password: %w", err)
+	}
+	if !match {
+		return nil, ErrInvalidCredentials
+	}
+	return UserFromDB(u), nil
+}
+
+// ClearUserPassword removes the password row for a user, disabling password
+// login for them. Other auth methods (OAuth, API tokens) are unaffected.
+func (svc *Service) ClearUserPassword(ctx context.Context, userID string) error {
+	return svc.queries.DeleteUserPassword(ctx, userID)
 }
 
 func (svc *Service) ListUsers(ctx context.Context) ([]*User, error) {
