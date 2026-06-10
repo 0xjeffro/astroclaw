@@ -181,6 +181,13 @@ CREATE TABLE "public"."app_system_connections" (
   "connected_at" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("connection_id")
 );
+-- Create "app_system_user_passwords" table
+CREATE TABLE "public"."app_system_user_passwords" (
+  "user_id" uuid NOT NULL,
+  "password_hash" text NOT NULL,
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY ("user_id")
+);
 -- Create "app_system_users" table
 CREATE TABLE "public"."app_system_users" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),

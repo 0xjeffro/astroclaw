@@ -30,6 +30,16 @@ CREATE TABLE app_system_workspace_members (
     PRIMARY KEY (user_id, workspace_id)
 );
 
+-- Password credential for users that authenticate via password. A user with
+-- no row here has no password set (e.g. they only log in via OAuth or API
+-- token in the future). password_hash stores the full PHC-encoded Argon2id
+-- string (salt and parameters included), produced by crypto.HashPassword.
+CREATE TABLE app_system_user_passwords (
+    user_id        UUID PRIMARY KEY,
+    password_hash  TEXT NOT NULL,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Active WebSocket connections. Written by connect Lambda, deleted by disconnect Lambda.
 CREATE TABLE app_system_connections (
     connection_id TEXT PRIMARY KEY,

@@ -24,6 +24,12 @@ type AppSystemUser struct {
 	UpdatedAt time.Time
 }
 
+type AppSystemUserPassword struct {
+	UserID       string
+	PasswordHash string
+	UpdatedAt    time.Time
+}
+
 type AppSystemWorkspace struct {
 	ID        string
 	Name      string

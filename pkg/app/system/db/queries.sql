@@ -75,6 +75,20 @@ UPDATE app_system_workspace_members
 SET role = $1
 WHERE user_id = $2 AND workspace_id = $3;
 
+-- User Passwords
+
+-- name: GetUserPasswordHash :one
+SELECT password_hash FROM app_system_user_passwords WHERE user_id = $1;
+
+-- name: UpsertUserPasswordHash :exec
+INSERT INTO app_system_user_passwords (user_id, password_hash)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET password_hash = EXCLUDED.password_hash, updated_at = now();
+
+-- name: DeleteUserPassword :exec
+DELETE FROM app_system_user_passwords WHERE user_id = $1;
+
 -- Connections
 
 -- name: CreateConnection :exec

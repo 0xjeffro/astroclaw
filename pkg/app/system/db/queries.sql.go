@@ -104,6 +104,15 @@ func (q *Queries) DeleteConnection(ctx context.Context, connectionID string) err
 	return err
 }
 
+const deleteUserPassword = `-- name: DeleteUserPassword :exec
+DELETE FROM app_system_user_passwords WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserPassword(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, deleteUserPassword, userID)
+	return err
+}
+
 const getAdmin = `-- name: GetAdmin :one
 SELECT id, email, name, role, created_at, updated_at FROM app_system_users WHERE role = 'admin' LIMIT 1
 `
@@ -207,6 +216,19 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (AppSystemUs
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getUserPasswordHash = `-- name: GetUserPasswordHash :one
+
+SELECT password_hash FROM app_system_user_passwords WHERE user_id = $1
+`
+
+// User Passwords
+func (q *Queries) GetUserPasswordHash(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordHash, userID)
+	var password_hash string
+	err := row.Scan(&password_hash)
+	return password_hash, err
 }
 
 const getWorkspace = `-- name: GetWorkspace :one
@@ -427,5 +449,22 @@ type UpdateWorkspaceNameParams struct {
 
 func (q *Queries) UpdateWorkspaceName(ctx context.Context, arg UpdateWorkspaceNameParams) error {
 	_, err := q.db.Exec(ctx, updateWorkspaceName, arg.Name, arg.ID)
+	return err
+}
+
+const upsertUserPasswordHash = `-- name: UpsertUserPasswordHash :exec
+INSERT INTO app_system_user_passwords (user_id, password_hash)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO UPDATE
+SET password_hash = EXCLUDED.password_hash, updated_at = now()
+`
+
+type UpsertUserPasswordHashParams struct {
+	UserID       string
+	PasswordHash string
+}
+
+func (q *Queries) UpsertUserPasswordHash(ctx context.Context, arg UpsertUserPasswordHashParams) error {
+	_, err := q.db.Exec(ctx, upsertUserPasswordHash, arg.UserID, arg.PasswordHash)
 	return err
 }
