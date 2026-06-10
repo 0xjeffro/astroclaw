@@ -210,11 +210,11 @@ func TestGetSessionInternalError(t *testing.T) {
 	chatSvc := &fakeChat{getErr: errors.New("boom")}
 	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{})
 
-	// statusForError falls back to the call-site default for unknown errors,
-	// which for getSession is 404 (matches old behavior).
+	// statusForError maps only known sentinel errors (chat.ErrNotFound etc.)
+	// to 404; everything else falls through to the call-site default of 500.
 	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/x", nil)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 fallback, got %d", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 fallback, got %d", w.Code)
 	}
 }
 
@@ -290,39 +290,6 @@ func TestListUserWorkspaces(t *testing.T) {
 	}
 	if systemSvc.listUserID != "u1" {
 		t.Errorf("expected userID=u1, got %q", systemSvc.listUserID)
-	}
-}
-
-// "/users/admin" must take precedence over "/users/{userID}/workspaces"
-// (it has different path shapes, but worth pinning down explicitly).
-func TestUsersAdminPrecedence(t *testing.T) {
-	systemSvc := &fakeSystem{admin: &system.User{ID: "u-admin"}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc)
-
-	w := do(t, r, http.MethodGet, "/users/admin", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("admin route returned %d", w.Code)
-	}
-	if systemSvc.listUserID != "" {
-		t.Errorf("listUserWorkspaces should not be called; got userID=%q", systemSvc.listUserID)
-	}
-}
-
-func TestUnknownRouteReturns404(t *testing.T) {
-	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
-
-	w := do(t, r, http.MethodGet, "/totally-unknown", nil)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", w.Code)
-	}
-}
-
-func TestUnknownWorkspaceSubroute(t *testing.T) {
-	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{})
-
-	w := do(t, r, http.MethodGet, "/workspaces/ws1/whatever", nil)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
 

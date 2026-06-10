@@ -113,7 +113,7 @@ func getSession(svc chatService) http.HandlerFunc {
 		id := chi.URLParam(r, "sessionID")
 		s, err := svc.GetSession(r.Context(), id)
 		if err != nil {
-			writeJSON(w, statusForError(err, http.StatusNotFound), map[string]string{"error": err.Error()})
+			writeJSON(w, statusForError(err, http.StatusInternalServerError), map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, s)
@@ -140,7 +140,7 @@ func getSystemSetting(svc settingsService) http.HandlerFunc {
 		name := chi.URLParam(r, "name")
 		s, err := svc.GetSystemSetting(r.Context(), name)
 		if err != nil {
-			writeJSON(w, statusForError(err, http.StatusNotFound), map[string]string{"error": err.Error()})
+			writeJSON(w, statusForError(err, http.StatusInternalServerError), map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, s)
@@ -155,7 +155,7 @@ func getWorkspaceSetting(svc settingsService) http.HandlerFunc {
 		name := chi.URLParam(r, "name")
 		s, err := svc.GetWorkspaceSetting(r.Context(), workspaceID, name)
 		if err != nil {
-			writeJSON(w, statusForError(err, http.StatusNotFound), map[string]string{"error": err.Error()})
+			writeJSON(w, statusForError(err, http.StatusInternalServerError), map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, s)
