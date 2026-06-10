@@ -47,7 +47,7 @@ exports[`snapshot 1`] = `
     "GeneratedAdminPassword": {
       "Condition": "ShouldGenerateAdminPassword",
       "Description": "SAVE THIS NOW. Initial admin password for the seeded admin user; only shown on this deploy.",
-      "Value": "2fckBzIy5ZuNonlcsZYU9utTOut5Lki_",
+      "Value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     },
     "GeneratedApiKey": {
       "Condition": "ShouldGenerateApiKey",
@@ -431,7 +431,7 @@ exports[`snapshot 1`] = `
             "GENERATED_ADMIN_PASSWORD": {
               "Fn::If": [
                 "ShouldGenerateAdminPassword",
-                "2fckBzIy5ZuNonlcsZYU9utTOut5Lki_",
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "",
               ],
             },

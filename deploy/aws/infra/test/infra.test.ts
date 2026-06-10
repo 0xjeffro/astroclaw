@@ -5,8 +5,10 @@ import { InfraStack } from '../lib/infra-stack';
 
 // Fix non-deterministic values so snapshot tests are stable.
 // - crypto.randomUUID: generated API key changes every synth
+// - crypto.randomBytes: generated admin password changes every synth
 // - Date.now: CustomResource version changes every synth
 jest.spyOn(crypto, 'randomUUID').mockReturnValue('00000000-0000-0000-0000-000000000000');
+jest.spyOn(crypto, 'randomBytes').mockImplementation(((size: number) => Buffer.alloc(size)) as typeof crypto.randomBytes);
 jest.spyOn(Date, 'now').mockReturnValue(0);
 
 // Replace asset hashes (64-char hex) with a placeholder. Go binaries are
