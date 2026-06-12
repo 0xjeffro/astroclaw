@@ -61,7 +61,7 @@ func NewService(pool *pgxpool.Pool, opts ...Option) *Service {
 
 // Users
 
-func (svc *Service) CreateUser(ctx context.Context, email, name, role string) (*User, error) {
+func (svc *Service) CreateUser(ctx context.Context, email, name string, role Role) (*User, error) {
 	tx, err := svc.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -72,7 +72,7 @@ func (svc *Service) CreateUser(ctx context.Context, email, name, role string) (*
 	u, err := qtx.CreateUser(ctx, db.CreateUserParams{
 		Email: email,
 		Name:  name,
-		Role:  role,
+		Role:  string(role),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)

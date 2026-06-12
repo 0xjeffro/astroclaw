@@ -17,9 +17,11 @@ var (
 )
 
 // Platform-level roles (app_system_users.role).
+type Role string
+
 const (
-	RoleAdmin = "admin"
-	RoleUser  = "user"
+	RoleAdmin Role = "admin"
+	RoleUser  Role = "user"
 )
 
 // Workspace-level roles (app_system_memberships.role).
