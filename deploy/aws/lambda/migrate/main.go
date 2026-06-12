@@ -19,6 +19,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -103,6 +105,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	}
 
 	if err := seedCredentials(ctx, pwSvc); err != nil {
+		return nil, err
+	}
+
+	if err := seedJWTSecret(ctx, pwSvc); err != nil {
 		return nil, err
 	}
 
@@ -265,6 +271,32 @@ func seedSystemDataKey(ctx context.Context, pwSvc *passwords.Service) error {
 	if err := pwSvc.ProvisionSystemDataKey(ctx); err != nil {
 		return fmt.Errorf("provision system data key: %w", err)
 	}
+	return nil
+}
+
+// seedJWTSecret ensures a secret used to sign session JWTs exists in the
+// system-scope credentials. The secret never appears in any env var or
+// log output: it is generated on first deploy with crypto/rand, wrapped
+// with the system data key, and reused on subsequent deploys.
+func seedJWTSecret(ctx context.Context, pwSvc *passwords.Service) error {
+	if _, err := pwSvc.GetSystemCredential(ctx, "jwt-secret"); err == nil {
+		log.Println("jwt-secret already exists, skipping seed")
+		return nil
+	} else if !errors.Is(err, passwords.ErrNotFound) {
+		return fmt.Errorf("check jwt-secret: %w", err)
+	}
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return fmt.Errorf("generate jwt-secret: %w", err)
+	}
+	secret := base64.RawStdEncoding.EncodeToString(raw)
+
+	if err := pwSvc.UpsertSystemCredential(ctx, "jwt-secret",
+		"HMAC secret used to sign session JWTs (auto-generated, do not log)", secret); err != nil {
+		return fmt.Errorf("store jwt-secret: %w", err)
+	}
+	log.Println("seeded jwt-secret")
 	return nil
 }
 
