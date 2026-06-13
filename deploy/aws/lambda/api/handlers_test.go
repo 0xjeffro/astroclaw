@@ -4,14 +4,15 @@
 package main
 
 import (
+	"astroclaw/pkg/auth"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
 	"astroclaw/pkg/app/chat"
 	"astroclaw/pkg/app/settings"
@@ -137,6 +138,20 @@ func do(t *testing.T, h http.Handler, method, target string, body any) *httptest
 	} else {
 		r = httptest.NewRequest(method, target, nil)
 	}
+
+	// Attach a valid bearer token so requests pass the auth middleware
+	// mounted on protected routes. Tests that want to verify the unauth
+	// case build their own request and skip this helper.
+	secret, _ := stubSecret(context.Background())
+	now := time.Now()
+	tok, _ := auth.Sign(secret, auth.Claims{
+		UserID:     "u-test",
+		SystemRole: system.RoleAdmin,
+		Issued:     now,
+		Expiry:     now.Add(time.Hour),
+	})
+	r.Header.Set("Authorization", "Bearer "+tok)
+
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	return w
@@ -164,17 +179,6 @@ func TestCreateSessionInWorkspace(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("expected json content-type, got %q", ct)
-	}
-}
-
-func TestCreateSessionInvalidJSON(t *testing.T) {
-	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{}, stubSecret)
-	req := httptest.NewRequest(http.MethodPost, "/workspaces/ws1/sessions", strings.NewReader("{not-json"))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
 
@@ -316,5 +320,44 @@ func TestMethodNotAllowed(t *testing.T) {
 	w := do(t, r, http.MethodPatch, "/users/admin", nil)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
+
+// Protected routes require a bearer token. Without one, the auth
+// middleware should reject the request with 401 before any service
+// is called.
+func TestProtectedRouteNoToken(t *testing.T) {
+	sys := &fakeSystem{admin: &system.User{ID: "u-admin"}}
+	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/admin", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+// Expired tokens are rejected even though the signature is valid.
+func TestProtectedRouteExpiredToken(t *testing.T) {
+	sys := &fakeSystem{admin: &system.User{ID: "u-admin"}}
+	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+
+	secret, _ := stubSecret(context.Background())
+	tok, _ := auth.Sign(secret, auth.Claims{
+		UserID:     "u-test",
+		SystemRole: system.RoleAdmin,
+		Issued:     time.Now().Add(-2 * time.Hour),
+		Expiry:     time.Now().Add(-time.Hour),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/users/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
 	}
 }

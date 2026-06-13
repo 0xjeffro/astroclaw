@@ -1,6 +1,7 @@
 package main
 
 import (
+	"astroclaw/pkg/auth"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,23 +49,26 @@ func newRouter(chatSvc chatService, settingsSvc settingsService, systemSvc syste
 	r := chi.NewRouter()
 
 	r.Post("/login", login(systemSvc, getSecret))
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireAuth(getSecret))
 
-	r.Route("/workspaces/{workspaceID}", func(r chi.Router) {
-		r.Route("/sessions", func(r chi.Router) {
-			r.Post("/", createSessionInWorkspace(chatSvc))
-			r.Get("/", listSessions(chatSvc))
-			r.Get("/{sessionID}", getSession(chatSvc))
-			r.Delete("/{sessionID}", deleteSession(chatSvc))
+		r.Route("/workspaces/{workspaceID}", func(r chi.Router) {
+			r.Route("/sessions", func(r chi.Router) {
+				r.Post("/", createSessionInWorkspace(chatSvc))
+				r.Get("/", listSessions(chatSvc))
+				r.Get("/{sessionID}", getSession(chatSvc))
+				r.Delete("/{sessionID}", deleteSession(chatSvc))
+			})
+			r.Route("/settings", func(r chi.Router) {
+				r.Get("/{name}", getWorkspaceSetting(settingsSvc))
+				r.Put("/{name}", upsertWorkspaceSetting(settingsSvc))
+			})
 		})
-		r.Route("/settings", func(r chi.Router) {
-			r.Get("/{name}", getWorkspaceSetting(settingsSvc))
-			r.Put("/{name}", upsertWorkspaceSetting(settingsSvc))
-		})
+
+		r.Get("/settings/{name}", getSystemSetting(settingsSvc))
+		r.Get("/users/admin", getAdmin(systemSvc))
+		r.Get("/users/{userID}/workspaces", listUserWorkspaces(systemSvc))
 	})
-
-	r.Get("/settings/{name}", getSystemSetting(settingsSvc))
-	r.Get("/users/admin", getAdmin(systemSvc))
-	r.Get("/users/{userID}/workspaces", listUserWorkspaces(systemSvc))
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
