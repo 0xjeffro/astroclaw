@@ -257,10 +257,10 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, dsqlMode bool) error
 // in app_system_api_tokens once that table and the auth flow are in place.
 func seedCredentials(ctx context.Context, pwSvc *passwords.Service) error {
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
-		if err := pwSvc.UpsertSystemCredential(ctx, "anthropic-api-key", "Anthropic API key, set via CDK parameter", key); err != nil {
-			return fmt.Errorf("seed anthropic-api-key: %w", err)
+		if err := pwSvc.UpsertSystemCredential(ctx, passwords.SystemCredAnthropicAPIKey, "Anthropic API key, set via CDK parameter", key); err != nil {
+			return fmt.Errorf("seed %s: %w", passwords.SystemCredAnthropicAPIKey, err)
 		}
-		log.Println("seeded anthropic-api-key")
+		log.Printf("seeded %s", passwords.SystemCredAnthropicAPIKey)
 	}
 	return nil
 }
@@ -279,24 +279,24 @@ func seedSystemDataKey(ctx context.Context, pwSvc *passwords.Service) error {
 // log output: it is generated on first deploy with crypto/rand, wrapped
 // with the system data key, and reused on subsequent deploys.
 func seedJWTSecret(ctx context.Context, pwSvc *passwords.Service) error {
-	if _, err := pwSvc.GetSystemCredential(ctx, "jwt-secret"); err == nil {
-		log.Println("jwt-secret already exists, skipping seed")
+	if _, err := pwSvc.GetSystemCredential(ctx, passwords.SystemCredJWTSecret); err == nil {
+		log.Printf("%s already exists, skipping seed", passwords.SystemCredJWTSecret)
 		return nil
 	} else if !errors.Is(err, passwords.ErrNotFound) {
-		return fmt.Errorf("check jwt-secret: %w", err)
+		return fmt.Errorf("check %s: %w", passwords.SystemCredJWTSecret, err)
 	}
 
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		return fmt.Errorf("generate jwt-secret: %w", err)
+		return fmt.Errorf("generate %s: %w", passwords.SystemCredJWTSecret, err)
 	}
 	secret := base64.RawStdEncoding.EncodeToString(raw)
 
-	if err := pwSvc.UpsertSystemCredential(ctx, "jwt-secret",
+	if err := pwSvc.UpsertSystemCredential(ctx, passwords.SystemCredJWTSecret,
 		"HMAC secret used to sign session JWTs (auto-generated, do not log)", secret); err != nil {
-		return fmt.Errorf("store jwt-secret: %w", err)
+		return fmt.Errorf("store %s: %w", passwords.SystemCredJWTSecret, err)
 	}
-	log.Println("seeded jwt-secret")
+	log.Printf("seeded %s", passwords.SystemCredJWTSecret)
 	return nil
 }
 

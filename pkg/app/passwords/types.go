@@ -9,6 +9,13 @@ var (
 	ErrNotFound = errors.New("credential not found")
 )
 
+// System-scope credential names. Defined here so every caller references
+// the same string and a typo can't silently create an orphan row.
+const (
+	SystemCredAnthropicAPIKey = "anthropic-api-key"
+	SystemCredJWTSecret       = "jwt-secret"
+)
+
 // Credential is the decrypted form of a stored credential.
 type Credential struct {
 	Name        string

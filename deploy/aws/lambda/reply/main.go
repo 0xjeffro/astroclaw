@@ -73,7 +73,7 @@ func init() {
 	// For exp, if anti's is not set, fall back to openai. This should be accompanied by some config files to set how the fallback should be handled.
 	// Another point is, it the user has configured their own key, it should take priority over the user's own.
 	// Furthermore, if the user's key is down, we should fall back to the system's key instead of just erroring out.
-	llmCred, err := pwSvc.GetSystemCredential(ctx, "anthropic-api-key")
+	llmCred, err := pwSvc.GetSystemCredential(ctx, passwords.SystemCredAnthropicAPIKey)
 	if err != nil {
 		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
 	}
