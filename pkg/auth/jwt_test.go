@@ -13,7 +13,7 @@ import (
 
 // testSecret is 32 bytes of fixed content, long enough to pass the
 // minimum-length check. Real deployments use random bytes from crypto/rand.
-var testSecret = []byte("0123456789abcdef0123456789abcdef")
+var jwtTestSecret = []byte("0123456789abcdef0123456789abcdef")
 
 func validClaims() Claims {
 	now := time.Now()
@@ -30,12 +30,12 @@ func validClaims() Claims {
 // JWT encodes Unix seconds, dropping sub-second precision.
 func TestSignParseRoundTrip(t *testing.T) {
 	c := validClaims()
-	tok, err := Sign(testSecret, c)
+	tok, err := Sign(jwtTestSecret, c)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 
-	got, err := Parse(testSecret, tok)
+	got, err := Parse(jwtTestSecret, tok)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -61,12 +61,12 @@ func TestParseExpired(t *testing.T) {
 	c.Issued = time.Now().Add(-2 * time.Hour)
 	c.Expiry = time.Now().Add(-time.Hour)
 
-	tok, err := Sign(testSecret, c)
+	tok, err := Sign(jwtTestSecret, c)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 
-	_, err = Parse(testSecret, tok)
+	_, err = Parse(jwtTestSecret, tok)
 	if !errors.Is(err, ErrTokenExpired) {
 		t.Fatalf("expected ErrTokenExpired, got %v", err)
 	}
@@ -90,7 +90,7 @@ func TestParseRejectsAlgNone(t *testing.T) {
 		t.Fatalf("build alg=none token: %v", err)
 	}
 
-	if _, err := Parse(testSecret, tokStr); !errors.Is(err, ErrTokenInvalid) {
+	if _, err := Parse(jwtTestSecret, tokStr); !errors.Is(err, ErrTokenInvalid) {
 		t.Fatalf("expected ErrTokenInvalid for alg=none, got %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestParseRejectsAlgNone(t *testing.T) {
 // Wrong secret: Parse with a different secret must fail because the HMAC
 // signature won't match. Catches "someone reused a key they shouldn't have".
 func TestParseRejectsWrongSecret(t *testing.T) {
-	tok, err := Sign(testSecret, validClaims())
+	tok, err := Sign(jwtTestSecret, validClaims())
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestParseRejectsWrongSecret(t *testing.T) {
 // Tampered payload: flip a byte in the middle base64 segment. The
 // signature won't match the modified payload and Parse must reject.
 func TestParseRejectsTamperedPayload(t *testing.T) {
-	tok, err := Sign(testSecret, validClaims())
+	tok, err := Sign(jwtTestSecret, validClaims())
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestParseRejectsTamperedPayload(t *testing.T) {
 	parts[1] = parts[1][:len(parts[1])-1] + "A"
 	tampered := strings.Join(parts, ".")
 
-	if _, err := Parse(testSecret, tampered); !errors.Is(err, ErrTokenInvalid) {
+	if _, err := Parse(jwtTestSecret, tampered); !errors.Is(err, ErrTokenInvalid) {
 		t.Fatalf("expected ErrTokenInvalid for tampered token, got %v", err)
 	}
 }
