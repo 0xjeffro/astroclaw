@@ -35,12 +35,19 @@ type settingsService interface {
 type systemService interface {
 	GetAdmin(ctx context.Context) (*system.User, error)
 	ListWorkspacesForUser(ctx context.Context, userID string) ([]*system.Workspace, error)
+	VerifyUserPassword(ctx context.Context, email, password string) (*system.User, error)
 }
 
 // newRouter wires up the chi router with the supplied services. Kept
 // separate from init() so tests can build a router without DSQL.
-func newRouter(chatSvc chatService, settingsSvc settingsService, systemSvc systemService) http.Handler {
+//
+// getSecret is the JWT signing-key loader, threaded through to handlers
+// that need to sign tokens (POST /login) or verify them (auth middleware,
+// added in a later wiring step).
+func newRouter(chatSvc chatService, settingsSvc settingsService, systemSvc systemService, getSecret func(context.Context) ([]byte, error)) http.Handler {
 	r := chi.NewRouter()
+
+	r.Post("/login", login(systemSvc, getSecret))
 
 	r.Route("/workspaces/{workspaceID}", func(r chi.Router) {
 		r.Route("/sessions", func(r chi.Router) {
