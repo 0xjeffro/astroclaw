@@ -41,6 +41,10 @@ type CreateConnectionParams struct {
 }
 
 // Connections
+// TODO: reconsider whether a connection should be bound to a workspace.
+// Slack/Discord style is one connection per user, with workspace_id
+// carried in each message payload. Current binding forces a reconnect
+// when the user switches workspaces and blocks cross-workspace events.
 func (q *Queries) CreateConnection(ctx context.Context, arg CreateConnectionParams) error {
 	_, err := q.db.Exec(ctx, createConnection, arg.ConnectionID, arg.UserID, arg.WorkspaceID)
 	return err
