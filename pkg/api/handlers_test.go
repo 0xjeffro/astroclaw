@@ -101,6 +101,12 @@ type fakeSystem struct {
 	verifyCalledEmail, verifyCalledPassword string
 	verifyUser                              *system.User
 	verifyErr                               error
+	currentUser                             *system.User
+	currentErr                              error
+}
+
+func (f *fakeSystem) GetUser(ctx context.Context, _ string) (*system.User, error) {
+	return f.currentUser, f.currentErr
 }
 
 func (f *fakeSystem) GetAdmin(_ context.Context) (*system.User, error) {
@@ -297,6 +303,23 @@ func TestGetAdmin(t *testing.T) {
 	w := do(t, r, http.MethodGet, "/users/admin", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestGetMe(t *testing.T) {
+	systemSvc := &fakeSystem{currentUser: &system.User{ID: "u-test", Email: "test@x.com"}}
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, systemSvc, stubSecret)
+
+	w := do(t, r, http.MethodGet, "/me", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var got system.User
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ID != "u-test" {
+		t.Errorf("user: got %+v", got)
 	}
 }
 

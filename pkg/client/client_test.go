@@ -48,6 +48,12 @@ type fakeSystem struct {
 	adminErr   error
 	wsList     []*system.Workspace
 	listErr    error
+	meUser     *system.User
+	meErr      error
+}
+
+func (f *fakeSystem) GetUser(_ context.Context, _ string) (*system.User, error) {
+	return f.meUser, f.meErr
 }
 
 func (f *fakeSystem) VerifyUserPassword(_ context.Context, _, _ string) (*system.User, error) {

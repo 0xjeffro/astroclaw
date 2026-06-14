@@ -174,3 +174,18 @@ func (c *Client) ListUserWorkspaces(ctx context.Context, userID string) ([]*syst
 	}
 	return ws, nil
 }
+
+// Me returns the currently authenticated user, identified by the bearer
+// token. CLIs use this to discover the user's ID without keeping it in
+// local state.
+func (c *Client) Me(ctx context.Context) (*system.User, error) {
+	body, err := c.do(ctx, http.MethodGet, "/me", nil)
+	if err != nil {
+		return nil, err
+	}
+	var u system.User
+	if err := json.Unmarshal(body, &u); err != nil {
+		return nil, fmt.Errorf("client: decode me: %w", err)
+	}
+	return &u, nil
+}

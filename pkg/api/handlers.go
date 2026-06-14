@@ -37,6 +37,7 @@ type systemService interface {
 	GetAdmin(ctx context.Context) (*system.User, error)
 	ListWorkspacesForUser(ctx context.Context, userID string) ([]*system.Workspace, error)
 	VerifyUserPassword(ctx context.Context, email, password string) (*system.User, error)
+	GetUser(ctx context.Context, id string) (*system.User, error)
 }
 
 // NewRouter wires up the chi router with the supplied services. Kept
@@ -66,6 +67,7 @@ func NewRouter(chatSvc chatService, settingsSvc settingsService, systemSvc syste
 		})
 
 		r.Get("/settings/{name}", getSystemSetting(settingsSvc))
+		r.Get("/me", getMe(systemSvc))
 		r.Get("/users/admin", getAdmin(systemSvc))
 		r.Get("/users/{userID}/workspaces", listUserWorkspaces(systemSvc))
 	})
@@ -201,6 +203,23 @@ func getAdmin(svc systemService) http.HandlerFunc {
 		u, err := svc.GetAdmin(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, u)
+	}
+}
+
+func getMe(svc systemService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := auth.ClaimsFromContext(r.Context())
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no claims"})
+			return
+		}
+		u, err := svc.GetUser(r.Context(), claims.UserID)
+		if err != nil {
+			writeJSON(w, statusForError(err, http.StatusInternalServerError),
+				map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, u)
