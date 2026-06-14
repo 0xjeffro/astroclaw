@@ -91,6 +91,10 @@ DELETE FROM app_system_user_passwords WHERE user_id = $1;
 
 -- Connections
 
+-- TODO: reconsider whether a connection should be bound to a workspace.
+-- Slack/Discord style is one connection per user, with workspace_id
+-- carried in each message payload. Current binding forces a reconnect
+-- when the user switches workspaces and blocks cross-workspace events.
 -- name: CreateConnection :exec
 INSERT INTO app_system_connections (connection_id, user_id, workspace_id)
 VALUES ($1, $2, $3);

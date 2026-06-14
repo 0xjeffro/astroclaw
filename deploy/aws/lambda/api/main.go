@@ -1,6 +1,7 @@
 package main
 
 import (
+	"astroclaw/pkg/api"
 	"astroclaw/pkg/app/chat"
 	"astroclaw/pkg/app/passwords"
 	"astroclaw/pkg/app/settings"
@@ -43,7 +44,7 @@ func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 	settingsSvc := settings.NewService(pool)
 	systemSvc := system.NewService(pool)
 
-	return httpadapter.NewV2(newRouter(chatSvc, settingsSvc, systemSvc, secretLoader.Get))
+	return httpadapter.NewV2(api.NewRouter(chatSvc, settingsSvc, systemSvc, secretLoader.Get))
 }
 
 func main() {

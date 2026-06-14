@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func TestLoginValid(t *testing.T) {
 		Email: "admin@example.com",
 		Role:  string(system.RoleAdmin),
 	}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	w := do(t, r, http.MethodPost, "/login", map[string]string{
 		"email":    "admin@example.com",
@@ -69,7 +69,7 @@ func TestLoginValid(t *testing.T) {
 // issued and the response says nothing about which field was wrong.
 func TestLoginInvalidCredentials(t *testing.T) {
 	sys := &fakeSystem{verifyErr: system.ErrInvalidCredentials}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	w := do(t, r, http.MethodPost, "/login", map[string]string{
 		"email":    "anyone@example.com",
@@ -91,7 +91,7 @@ func TestLoginInvalidCredentials(t *testing.T) {
 // Malformed JSON body is a 400 before we ever talk to the service.
 func TestLoginBadBody(t *testing.T) {
 	sys := &fakeSystem{}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("{not-json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -109,7 +109,7 @@ func TestLoginBadBody(t *testing.T) {
 // Missing email or password is a 400 with a distinct message.
 func TestLoginMissingFields(t *testing.T) {
 	sys := &fakeSystem{}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	w := do(t, r, http.MethodPost, "/login", map[string]string{
 		"email":    "admin@example.com",
@@ -132,7 +132,7 @@ func TestLoginMissingFields(t *testing.T) {
 // client did everything right, the server cannot finish the job.
 func TestLoginSecretLoadError(t *testing.T) {
 	sys := &fakeSystem{verifyUser: &system.User{ID: "u-1", Role: string(system.RoleAdmin)}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, failingSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, failingSecret)
 
 	w := do(t, r, http.MethodPost, "/login", map[string]string{
 		"email":    "x@example.com",

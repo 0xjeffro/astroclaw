@@ -1,7 +1,7 @@
 // Tests for the chi-based API router. They drive the router via
 // httptest.NewRecorder + httptest.NewRequest and use in-memory fake services,
 // so no DSQL connection is required.
-package main
+package api
 
 import (
 	"astroclaw/pkg/auth"
@@ -161,7 +161,7 @@ func do(t *testing.T, h http.Handler, method, target string, body any) *httptest
 
 func TestCreateSessionInWorkspace(t *testing.T) {
 	chatSvc := &fakeChat{createSession: &chat.Session{ID: "s1", WorkspaceID: "ws1"}}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	body := map[string]any{
 		"user_id":   "u1",
@@ -184,7 +184,7 @@ func TestCreateSessionInWorkspace(t *testing.T) {
 
 func TestListSessions(t *testing.T) {
 	chatSvc := &fakeChat{listResult: []*chat.Session{{ID: "s1"}, {ID: "s2"}}}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions", nil)
 
@@ -205,7 +205,7 @@ func TestListSessions(t *testing.T) {
 
 func TestGetSession(t *testing.T) {
 	chatSvc := &fakeChat{getResult: &chat.Session{ID: "abc"}}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/abc", nil)
 	if w.Code != http.StatusOK {
@@ -218,7 +218,7 @@ func TestGetSession(t *testing.T) {
 
 func TestGetSessionNotFound(t *testing.T) {
 	chatSvc := &fakeChat{getErr: chat.ErrNotFound}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/workspaces/ws1/sessions/missing", nil)
 	if w.Code != http.StatusNotFound {
@@ -228,7 +228,7 @@ func TestGetSessionNotFound(t *testing.T) {
 
 func TestGetSessionInternalError(t *testing.T) {
 	chatSvc := &fakeChat{getErr: errors.New("boom")}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	// statusForError maps only known sentinel errors (chat.ErrNotFound etc.)
 	// to 404; everything else falls through to the call-site default of 500.
@@ -240,7 +240,7 @@ func TestGetSessionInternalError(t *testing.T) {
 
 func TestDeleteSession(t *testing.T) {
 	chatSvc := &fakeChat{}
-	r := newRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(chatSvc, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodDelete, "/workspaces/ws1/sessions/xyz", nil)
 	if w.Code != http.StatusOK {
@@ -253,7 +253,7 @@ func TestDeleteSession(t *testing.T) {
 
 func TestGetSystemSetting(t *testing.T) {
 	settingsSvc := &fakeSettings{sysResult: &settings.SystemSetting{Name: "k", Value: "v"}}
-	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
+	r := NewRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/settings/k", nil)
 	if w.Code != http.StatusOK {
@@ -266,7 +266,7 @@ func TestGetSystemSetting(t *testing.T) {
 
 func TestGetWorkspaceSetting(t *testing.T) {
 	settingsSvc := &fakeSettings{wsResult: &settings.WorkspaceSetting{WorkspaceID: "ws1", Name: "k", Value: "v"}}
-	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
+	r := NewRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/workspaces/ws1/settings/k", nil)
 	if w.Code != http.StatusOK {
@@ -279,7 +279,7 @@ func TestGetWorkspaceSetting(t *testing.T) {
 
 func TestUpsertWorkspaceSetting(t *testing.T) {
 	settingsSvc := &fakeSettings{}
-	r := newRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
+	r := NewRouter(&fakeChat{}, settingsSvc, &fakeSystem{}, stubSecret)
 
 	w := do(t, r, http.MethodPut, "/workspaces/ws1/settings/k", map[string]string{"value": "newval"})
 	if w.Code != http.StatusOK {
@@ -292,7 +292,7 @@ func TestUpsertWorkspaceSetting(t *testing.T) {
 
 func TestGetAdmin(t *testing.T) {
 	systemSvc := &fakeSystem{admin: &system.User{ID: "u-admin"}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, systemSvc, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/users/admin", nil)
 	if w.Code != http.StatusOK {
@@ -302,7 +302,7 @@ func TestGetAdmin(t *testing.T) {
 
 func TestListUserWorkspaces(t *testing.T) {
 	systemSvc := &fakeSystem{wsList: []*system.Workspace{{ID: "ws1"}}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, systemSvc, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, systemSvc, stubSecret)
 
 	w := do(t, r, http.MethodGet, "/users/u1/workspaces", nil)
 	if w.Code != http.StatusOK {
@@ -314,7 +314,7 @@ func TestListUserWorkspaces(t *testing.T) {
 }
 
 func TestMethodNotAllowed(t *testing.T) {
-	r := newRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{}, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, &fakeSystem{}, stubSecret)
 
 	// PATCH on /users/admin is not registered; chi returns 405.
 	w := do(t, r, http.MethodPatch, "/users/admin", nil)
@@ -328,7 +328,7 @@ func TestMethodNotAllowed(t *testing.T) {
 // is called.
 func TestProtectedRouteNoToken(t *testing.T) {
 	sys := &fakeSystem{admin: &system.User{ID: "u-admin"}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	req := httptest.NewRequest(http.MethodGet, "/users/admin", nil)
 	w := httptest.NewRecorder()
@@ -342,7 +342,7 @@ func TestProtectedRouteNoToken(t *testing.T) {
 // Expired tokens are rejected even though the signature is valid.
 func TestProtectedRouteExpiredToken(t *testing.T) {
 	sys := &fakeSystem{admin: &system.User{ID: "u-admin"}}
-	r := newRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	r := NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
 
 	secret, _ := stubSecret(context.Background())
 	tok, _ := auth.Sign(secret, auth.Claims{
