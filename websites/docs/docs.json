@@ -1,12 +1,19 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "almond",
+  "theme": "aspen",
   "name": "AstroClaw",
   "description": "AWS-native AI agent platform with one-click CDK deployment, persistent chat sessions, and real-time streaming.",
   "colors": {
-    "primary": "#6366F1",
-    "light": "#818CF8",
-    "dark": "#4338CA"
+    "primary": "#d55816",
+    "light": "#d55816",
+    "dark": "#d55816"
+  },
+  "background": {
+    "decoration": "grid"
+  },
+  "fonts": {
+    "heading": { "family": "Inter", "weight": 600 },
+    "body": { "family": "Inter", "weight": 400 }
   },
   "favicon": "/favicon.ico",
   "icons": {
@@ -20,90 +27,40 @@
     "options": ["copy", "view", "assistant", "mcp", "add-mcp"]
   },
   "navigation": {
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Home",
-          "icon": "house",
-          "href": "/"
-        },
-        {
-          "anchor": "GitHub",
-          "icon": "github",
-          "href": "https://github.com/0xjeffro/astroclaw"
-        }
-      ]
-    },
     "directory": "card",
     "tabs": [
       {
-        "tab": "Documentation",
+        "tab": "Get Started",
         "groups": [
           {
             "group": "Get Started",
             "icon": "rocket",
-            "expanded": true,
             "pages": [
-              "introduction",
-              "quickstart",
-              "local-development"
-            ]
-          },
-          {
-            "group": "Core Concepts",
-            "icon": "book-open",
-            "expanded": true,
-            "pages": [
-              "concepts/agents",
-              "concepts/sessions",
-              "concepts/tools",
-              "concepts/skills",
-              "concepts/memory"
-            ]
-          },
-          {
-            "group": "Deployment",
-            "icon": "cloud",
-            "expanded": true,
-            "pages": [
-              "deployment/aws-cdk",
-              "deployment/configuration",
-              "deployment/database"
-            ]
-          },
-          {
-            "group": "Clients",
-            "icon": "terminal",
-            "expanded": true,
-            "pages": [
-              "clients/tui",
-              "clients/cli"
+              "get-started/overview"
             ]
           }
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "User Guide",
         "groups": [
           {
-            "group": "Overview",
-            "icon": "circle-help",
-            "expanded": true,
+            "group": "User Guide",
+            "icon": "book-open",
             "pages": [
-              "api/overview",
-              "api/authentication"
+              "user-guide/overview"
             ]
-          },
+          }
+        ]
+      },
+      {
+        "tab": "Developer Guide",
+        "groups": [
           {
-            "group": "Endpoints",
-            "icon": "plug",
-            "expanded": true,
+            "group": "Developer Guide",
+            "icon": "code",
             "pages": [
-              "api/sessions",
-              "api/agents",
-              "api/settings",
-              "api/users",
-              "api/websocket"
+              "developer-guide/overview"
             ]
           }
         ]
@@ -123,7 +80,9 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/0xjeffro/astroclaw"
+      "github": "https://github.com/0xjeffro/astroclaw",
+      "x": "https://x.com/JeffroBTC",
+      "linkedin": "https://www.linkedin.com/in/0xjeffro/"
     }
   }
 }
