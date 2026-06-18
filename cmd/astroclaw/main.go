@@ -15,7 +15,7 @@ func main() {
 		Short: "Astroclaw CLI",
 	}
 
-	rootCmd.AddCommand(loginCmd(), workspacesCmd())
+	rootCmd.AddCommand(loginCmd(), workspacesCmd(), whoamiCmd())
 
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		os.Exit(1)
