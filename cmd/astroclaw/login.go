@@ -18,8 +18,9 @@ can be captured into an environment variable, for example:
 
 	export ASTROCLAW_TOKEN=$(astroclaw login --email me@example.com)
 
-The password is read from the --password flag, then the ASTROCLAW_PASSWORD
-environment variable, then an interactive prompt (in that order).
+The password is read from the --password flag, then the
+ASTROCLAW_ADMIN_PASSWORD environment variable, then an interactive
+prompt (in that order).
 
 Status messages such as the password prompt go to stderr, leaving stdout
 clean for shell substitution.`,
@@ -28,9 +29,9 @@ clean for shell substitution.`,
 				return fmt.Errorf("--email is required")
 			}
 			// Password resolution order: --password flag, then
-			// ASTROCLAW_PASSWORD env var, then interactive prompt.
+			// ASTROCLAW_ADMIN_PASSWORD env var, then interactive prompt.
 			if password == "" {
-				password = os.Getenv("ASTROCLAW_PASSWORD")
+				password = os.Getenv("ASTROCLAW_ADMIN_PASSWORD")
 			}
 			if password == "" {
 				_, _ = fmt.Fprint(os.Stderr, "password: ")

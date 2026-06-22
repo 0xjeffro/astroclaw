@@ -1,0 +1,16 @@
+# Verify the login -> whoami round trip against the deployed backend.
+# Setup injects ASTROCLAW_API_URL and ASTROCLAW_PASSWORD; login reads
+# the password from the env var and prints the JWT to stdout, which we
+# then feed into the env for whoami via the setenvfile helper.
+
+# Log in. stdout should be a JWT (header.payload.signature, "eyJ..." prefix).
+exec astroclaw login --email admin@astroclaw.local
+stdout '^eyJ'
+
+# Capture the token into an env var the next command will see.
+cp stdout token.txt
+setenvfile ASTROCLAW_TOKEN token.txt
+
+# whoami should print the admin email back.
+exec astroclaw whoami
+stdout 'admin@astroclaw.local'
