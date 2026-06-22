@@ -7,39 +7,15 @@ import (
 	"testing"
 
 	"astroclaw/pkg/api"
-	"astroclaw/pkg/app/chat"
-	"astroclaw/pkg/app/settings"
 	"astroclaw/pkg/app/system"
 )
 
 // --- fakes ---
 //
-// The fakes here mirror the ones in pkg/api/handlers_test.go but live in
-// this package so client tests can exercise the real api.NewRouter end
-// to end without depending on the api package's internal test fixtures.
-
-type fakeChat struct{}
-
-func (*fakeChat) CreateSessionInWorkspace(_ context.Context, _, _ string, _ []string, _ string) (*chat.Session, error) {
-	return nil, nil
-}
-func (*fakeChat) ListSessionsByWorkspace(_ context.Context, _ string) ([]*chat.Session, error) {
-	return nil, nil
-}
-func (*fakeChat) GetSession(_ context.Context, _ string) (*chat.Session, error) {
-	return nil, nil
-}
-func (*fakeChat) SoftDeleteSession(_ context.Context, _ string) error { return nil }
-
-type fakeSettings struct{}
-
-func (*fakeSettings) GetSystemSetting(_ context.Context, _ string) (*settings.SystemSetting, error) {
-	return nil, nil
-}
-func (*fakeSettings) GetWorkspaceSetting(_ context.Context, _, _ string) (*settings.WorkspaceSetting, error) {
-	return nil, nil
-}
-func (*fakeSettings) UpsertWorkspaceSetting(_ context.Context, _, _, _ string) error { return nil }
+// Only fakeSystem is needed: client tests exercise /login, /me,
+// /users/admin, and /users/{id}/workspaces, all of which sit on the
+// SystemService. RouterConfig leaves Chat and Settings nil so those
+// routes are simply not mounted.
 
 type fakeSystem struct {
 	verifyUser *system.User
@@ -75,7 +51,10 @@ func stubSecret(_ context.Context) ([]byte, error) {
 // The server is torn down when the test ends.
 func newTestServer(t *testing.T, sys *fakeSystem) (*httptest.Server, *Client) {
 	t.Helper()
-	router := api.NewRouter(&fakeChat{}, &fakeSettings{}, sys, stubSecret)
+	router := api.NewRouter(api.RouterConfig{
+		System:    sys,
+		GetSecret: stubSecret,
+	})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	return server, New(server.URL)

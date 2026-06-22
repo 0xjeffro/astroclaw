@@ -40,36 +40,58 @@ type systemService interface {
 	GetUser(ctx context.Context, id string) (*system.User, error)
 }
 
+// RouterConfig configures NewRouter. System and GetSecret are required;
+// Chat and Settings are optional. When Chat or Settings is nil the
+// corresponding routes are not mounted, which lets tests build a router
+// that only exposes the endpoints they exercise.
+type RouterConfig struct {
+	Chat      chatService
+	Settings  settingsService
+	System    systemService
+	GetSecret func(context.Context) ([]byte, error)
+}
+
 // NewRouter wires up the chi router with the supplied services. Kept
 // separate from init() so tests can build a router without DSQL.
-//
-// getSecret is the JWT signing-key loader, threaded through to handlers
-// that need to sign tokens (POST /login) or verify them (auth middleware,
-// added in a later wiring step).
-func NewRouter(chatSvc chatService, settingsSvc settingsService, systemSvc systemService, getSecret func(context.Context) ([]byte, error)) http.Handler {
+func NewRouter(cfg RouterConfig) http.Handler {
+	if cfg.System == nil {
+		panic("api.NewRouter: System is required")
+	}
+	if cfg.GetSecret == nil {
+		panic("api.NewRouter: GetSecret is required")
+	}
+
 	r := chi.NewRouter()
 
-	r.Post("/login", login(systemSvc, getSecret))
+	r.Post("/login", login(cfg.System, cfg.GetSecret))
 	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAuth(getSecret))
+		r.Use(auth.RequireAuth(cfg.GetSecret))
 
-		r.Route("/workspaces/{workspaceID}", func(r chi.Router) {
-			r.Route("/sessions", func(r chi.Router) {
-				r.Post("/", createSessionInWorkspace(chatSvc))
-				r.Get("/", listSessions(chatSvc))
-				r.Get("/{sessionID}", getSession(chatSvc))
-				r.Delete("/{sessionID}", deleteSession(chatSvc))
+		if cfg.Chat != nil || cfg.Settings != nil {
+			r.Route("/workspaces/{workspaceID}", func(r chi.Router) {
+				if cfg.Chat != nil {
+					r.Route("/sessions", func(r chi.Router) {
+						r.Post("/", createSessionInWorkspace(cfg.Chat))
+						r.Get("/", listSessions(cfg.Chat))
+						r.Get("/{sessionID}", getSession(cfg.Chat))
+						r.Delete("/{sessionID}", deleteSession(cfg.Chat))
+					})
+				}
+				if cfg.Settings != nil {
+					r.Route("/settings", func(r chi.Router) {
+						r.Get("/{name}", getWorkspaceSetting(cfg.Settings))
+						r.Put("/{name}", upsertWorkspaceSetting(cfg.Settings))
+					})
+				}
 			})
-			r.Route("/settings", func(r chi.Router) {
-				r.Get("/{name}", getWorkspaceSetting(settingsSvc))
-				r.Put("/{name}", upsertWorkspaceSetting(settingsSvc))
-			})
-		})
+		}
 
-		r.Get("/settings/{name}", getSystemSetting(settingsSvc))
-		r.Get("/me", getMe(systemSvc))
-		r.Get("/users/admin", getAdmin(systemSvc))
-		r.Get("/users/{userID}/workspaces", listUserWorkspaces(systemSvc))
+		if cfg.Settings != nil {
+			r.Get("/settings/{name}", getSystemSetting(cfg.Settings))
+		}
+		r.Get("/me", getMe(cfg.System))
+		r.Get("/users/admin", getAdmin(cfg.System))
+		r.Get("/users/{userID}/workspaces", listUserWorkspaces(cfg.System))
 	})
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {

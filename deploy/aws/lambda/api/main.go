@@ -44,7 +44,12 @@ func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 	settingsSvc := settings.NewService(pool)
 	systemSvc := system.NewService(pool)
 
-	return httpadapter.NewV2(api.NewRouter(chatSvc, settingsSvc, systemSvc, secretLoader.Get))
+	return httpadapter.NewV2(api.NewRouter(api.RouterConfig{
+		Chat:      chatSvc,
+		Settings:  settingsSvc,
+		System:    systemSvc,
+		GetSecret: secretLoader.Get,
+	}))
 }
 
 func main() {
