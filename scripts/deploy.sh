@@ -25,11 +25,16 @@ echo ""
 
 # Step 1: First deploy?
 GENERATE_API_KEY="false"
+GENERATE_ADMIN_PASSWORD="false"
 if ask_yn "Is this your first deploy?"; then
   GENERATE_API_KEY="true"
+  GENERATE_ADMIN_PASSWORD="true"
 else
   if ask_yn "Do you want to rotate the API key?"; then
     GENERATE_API_KEY="true"
+  fi
+  if ask_yn "Do you want to rotate the admin password?"; then
+    GENERATE_ADMIN_PASSWORD="true"
   fi
 fi
 
@@ -37,18 +42,19 @@ fi
 read -p "Anthropic API key (leave empty to keep existing): " ANTHROPIC_KEY
 
 # Step 3: Build CDK deploy command
-CDK_ARGS="--parameters GenerateApiKey=$GENERATE_API_KEY"
+CDK_ARGS="--parameters GenerateApiKey=$GENERATE_API_KEY --parameters GenerateAdminPassword=$GENERATE_ADMIN_PASSWORD"
 if [ -n "$ANTHROPIC_KEY" ]; then
   CDK_ARGS="$CDK_ARGS --parameters AnthropicApiKey=$ANTHROPIC_KEY"
 fi
 
 echo ""
 echo "--- Deploy Config ---"
-echo "GenerateApiKey: $GENERATE_API_KEY"
+echo "GenerateApiKey:        $GENERATE_API_KEY"
+echo "GenerateAdminPassword: $GENERATE_ADMIN_PASSWORD"
 if [ -n "$ANTHROPIC_KEY" ]; then
-  echo "AnthropicApiKey: (provided)"
+  echo "AnthropicApiKey:       (provided)"
 else
-  echo "AnthropicApiKey: (keep existing)"
+  echo "AnthropicApiKey:       (keep existing)"
 fi
 echo "---------------------"
 echo ""
@@ -68,6 +74,7 @@ API_URL=$(jq -r '.InfraStack.ApiUrl' "$OUTPUTS_FILE")
 REPLY_URL=$(jq -r '.InfraStack.ReplyUrl' "$OUTPUTS_FILE")
 WS_URL=$(jq -r '.InfraStack.WebSocketUrl' "$OUTPUTS_FILE")
 API_KEY=$(jq -r '.InfraStack.GeneratedApiKey // empty' "$OUTPUTS_FILE")
+ADMIN_PASSWORD=$(jq -r '.InfraStack.GeneratedAdminPassword // empty' "$OUTPUTS_FILE")
 
 # If no API key in outputs (GenerateApiKey=false), ask user to provide it.
 if [ -z "$API_KEY" ]; then
@@ -83,6 +90,10 @@ echo "API URL:       $API_URL"
 echo "Reply URL:     $REPLY_URL"
 echo "WebSocket URL: $WS_URL"
 echo "API Key:       $API_KEY"
+if [ -n "$ADMIN_PASSWORD" ]; then
+  echo "Admin Password: $ADMIN_PASSWORD"
+  echo "  (SAVE THIS NOW. Only shown on this deploy.)"
+fi
 echo ""
 echo "--- Run TUI ---"
 echo ""
