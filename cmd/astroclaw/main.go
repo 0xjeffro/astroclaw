@@ -10,16 +10,22 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// Run does the actual work and returns an exit code. Separated from main
+// so testscript can invoke it in-process without killing the test binary.
+func run() int {
 	rootCmd := &cobra.Command{
 		Use:   "astroclaw",
 		Short: "Astroclaw CLI",
 	}
-
 	rootCmd.AddCommand(loginCmd(), workspacesCmd(), whoamiCmd())
 
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func newClient() (*client.Client, error) {
