@@ -1,0 +1,19 @@
+# Verify workspaces list against the deployed backend.
+# Migrate Lambda seeds a workspace named "Default" on first deploy, so
+# the admin user always has at least that one.
+
+# Log in to get a token.
+exec astroclaw login --email admin@astroclaw.local
+stdout '^eyJ'
+cp stdout token.txt
+setenvfile ASTROCLAW_TOKEN token.txt
+
+# List workspaces. Table output should contain the header and the
+# seeded Default workspace.
+exec astroclaw workspaces list
+stdout 'NAME'
+stdout 'Default'
+
+# JSON output should be a JSON array containing Default.
+exec astroclaw workspaces list --json
+stdout '"Name":"Default"'
