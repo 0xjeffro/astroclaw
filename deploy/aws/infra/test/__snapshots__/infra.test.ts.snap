@@ -742,6 +742,7 @@ exports[`snapshot 1`] = `
           ],
           "Version": "2012-10-17",
         },
+        "PendingWindowInDays": 30,
       },
       "Type": "AWS::KMS::Key",
       "UpdateReplacePolicy": "Delete",
