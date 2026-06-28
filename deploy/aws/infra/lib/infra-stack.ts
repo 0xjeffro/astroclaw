@@ -108,11 +108,22 @@ export class InfraStack extends cdk.Stack {
     //   cdk deploy -c isProd=true
     const isProd = this.node.tryGetContext('isProd') === true;
 
+    // Ephemeral CI stacks (per-PR) use the minimum 7-day KMS pending
+    // window so cleanup is quick; long-lived stacks keep the safer
+    // 30-day default. KMS does not charge for keys in PendingDeletion,
+    // so this is just to keep the console clean.
+    const isEphemeral = process.env.EPHEMERAL_STACK === 'true';
+    const passwordsAlias = isEphemeral
+        // The alias is suffixed with the stack name for ephemeral stacks so
+        // parallel PR deploys do not collide on the region-unique alias name.
+      ? `astroclaw-passwords-${process.env.STACK_NAME}`
+      : 'astroclaw-passwords';
     const passwordsKey = new kms.Key(this, 'PasswordsKey', {
-      alias: 'astroclaw-passwords',
+      alias: passwordsAlias,
       enableKeyRotation: true,
       description: 'Encrypts workspace/user/system scoped data keys for the passwords app',
       removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      pendingWindow: cdk.Duration.days(isEphemeral ? 7 : 30),
     });
 
     // Lambda CDK docs: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda.Function.html
