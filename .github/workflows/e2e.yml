@@ -1,0 +1,159 @@
+name: e2e
+
+# End-to-end test suite. Deploys a real CDK stack to AWS, runs the CLI
+# testscript scenarios against the deployed endpoint, then tears the stack down.
+# See cmd/astroclaw/cli_test.go and cmd/astroclaw/testdata/scripts/*.txtar.
+#
+# Stack naming and lifecycle:
+#   pull_request -> Astroclaw-pr-<N> ephemeral, always destroyed
+#   push (main) -> Astroclaw-main-<run_id> ephemeral, always destroyed
+#   workflow_dispatch -> Astroclaw-manual-<run_id> destroyed unless keep_stack=true
+#
+# AWS auth is via OIDC (no long-lived access keys). The role ARN must be
+# stored in repo secret AWS_DEPLOY_ROLE_ARN, and the role must trust
+# token.actions.githubusercontent.com with a StringLike sub matching this repo.
+
+on:
+  pull_request:
+    types: [labeled]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      keep_stack:
+        description: 'Skip cdk destroy (keep stack for debugging)'
+        type: boolean
+        default: false
+
+# Newer runs cancel older ones for the same PR / branch so the workflow
+# does not race itself on the same stack name.
+concurrency:
+  group: e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'run-e2e')
+    runs-on: ubuntu-latest
+    permissions:
+      # id-token: write lets the runner request an OIDC token from
+      # GitHub, which the configure-aws-credentials step then exchanges
+      # for short-lived AWS credentials via STS:AssumeRoleWithWebIdentity.
+      # See https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Decide the stack name and whether to tear it down at the end,
+      # based on which event fired the workflow.
+      - name: Plan stack
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)
+              STACK_NAME="Astroclaw-pr-${{ github.event.pull_request.number }}"
+              EPHEMERAL=true
+              SHOULD_DESTROY=true
+              ;;
+            push)
+              STACK_NAME="Astroclaw-main-${{ github.run_id }}"
+              EPHEMERAL=true
+              SHOULD_DESTROY=true
+              ;;
+            workflow_dispatch)
+              STACK_NAME="Astroclaw-manual-${{ github.run_id }}"
+              EPHEMERAL=true
+              SHOULD_DESTROY=${{ inputs.keep_stack && 'false' || 'true' }}
+              ;;
+          esac
+          echo "STACK_NAME=$STACK_NAME"             >> $GITHUB_ENV
+          echo "EPHEMERAL_STACK=$EPHEMERAL"         >> $GITHUB_ENV
+          echo "SHOULD_DESTROY=$SHOULD_DESTROY"     >> $GITHUB_ENV
+          echo "Planned: stack=$STACK_NAME ephemeral=$EPHEMERAL destroy=$SHOULD_DESTROY"
+
+      # If a previous run was killed mid-deploy or destroy, the stack
+      # may still exist (PR stacks reuse the same name across retries).
+      # Delete any existing stack with this name so the deploy starts
+      # fresh. Unrecoverable states like UPDATE_ROLLBACK_FAILED will
+      # fail this step and surface to the workflow log for manual fixup.
+      #
+      # AWS CLI docs:
+      #   describe-stacks: https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stacks.html
+      #   delete-stack (async): https://docs.aws.amazon.com/cli/latest/reference/cloudformation/delete-stack.html
+      #   wait stack-delete-complete (polls 30s x 120, exits 255 on timeout):
+      #                              https://docs.aws.amazon.com/cli/latest/reference/cloudformation/wait/stack-delete-complete.html
+      - name: Cleanup stale stack
+        run: |
+          set +e
+          GREEN='\033[32m'
+          NC='\033[0m'
+
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].StackStatus' --output text 2>/dev/null)
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "None" ]; then
+            echo -e "${GREEN}No existing stack named $STACK_NAME, proceeding.${NC}"
+            exit 0
+          fi
+
+          echo "Found existing stack $STACK_NAME in state: $STATUS"
+          echo "Deleting before redeploy..."
+
+          aws cloudformation delete-stack --stack-name "$STACK_NAME"
+          aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
+
+          if [ $? -ne 0 ]; then
+            echo "::error::Failed to delete stuck stack $STACK_NAME, manual cleanup required"
+            exit 1
+          fi
+
+          echo -e "${GREEN}Stack deleted, proceeding with fresh deploy.${NC}"
+
+      - name: Install CDK deps
+        working-directory: deploy/aws/infra
+        run: npm install
+
+      # Always regenerate the admin password. Every stack is ephemeral,
+      # so this is the only way it is usable on first deploy.
+      - name: cdk deploy
+        working-directory: deploy/aws/infra
+        run: |
+          npx cdk deploy "$STACK_NAME" \
+            --parameters GenerateAdminPassword=true \
+            --require-approval never \
+            --outputs-file outputs.json
+
+      - name: Extract deploy outputs
+        working-directory: deploy/aws/infra
+        run: |
+          API_URL=$(jq -r ".\"$STACK_NAME\".ApiUrl" outputs.json)
+          ADMIN_PASSWORD=$(jq -r ".\"$STACK_NAME\".GeneratedAdminPassword" outputs.json)
+          echo "::add-mask::$ADMIN_PASSWORD"
+          echo "ASTROCLAW_API_URL=$API_URL"              >> $GITHUB_ENV
+          echo "ASTROCLAW_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
+
+      - name: Run e2e
+        run: go test ./cmd/astroclaw/... -v
+
+      - name: cdk destroy
+        if: always() && env.SHOULD_DESTROY == 'true'
+        working-directory: deploy/aws/infra
+        run: npx cdk destroy "$STACK_NAME" --force
