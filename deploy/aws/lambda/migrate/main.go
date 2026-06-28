@@ -252,9 +252,6 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool, dsqlMode bool) error
 // seedCredentials writes initial system-scope credentials into the database
 // from environment variables set by CDK parameters. The system data key
 // must already be provisioned (see seedSystemDataKey).
-//
-// TODO: api-key seeding is removed. (Replace with per-user API tokens stored?)
-// in app_system_api_tokens once that table and the auth flow are in place.
 func seedCredentials(ctx context.Context, pwSvc *passwords.Service) error {
 	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
 		if err := pwSvc.UpsertSystemCredential(ctx, passwords.SystemCredAnthropicAPIKey, "Anthropic API key, set via CDK parameter", key); err != nil {

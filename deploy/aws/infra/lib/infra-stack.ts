@@ -26,33 +26,7 @@ export class InfraStack extends cdk.Stack {
       description: 'Anthropic API key.',
     });
 
-    // API authentication key. When GenerateApiKey=true, a random key is
-    // generated at synth time, passed to migrate Lambda to seed into
-    //  the credentials table, and printed in the stack output.
-    //
-    // IMPORTANT: always pass this parameter explicitly on every deployment.
-    // CloudFormation retains the previous parameter value when omitted,
-    // so if you deployed with true once and then omit the parameter,
-    // it stays true and overwrites your API key with a new one.
-    //
-    // First deploy: --parameters GenerateApiKey=true
-    // Subsequent deploys: --parameters GenerateApiKey=false
-    const generateApiKey = new cdk.CfnParameter(this, 'GenerateApiKey', {
-      type: 'String',
-      default: 'false',
-      allowedValues: ['true', 'false'],
-      description: 'ALWAYS pass explicitly. true = generate new key (overwrites existing). false = keep existing key.',
-    });
-
-    const generatedApiKey = crypto.randomUUID();
-
-    // CDK CfnCondition docs: https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.CfnCondition.html
-    const shouldGenerateApiKey = new cdk.CfnCondition(this, 'ShouldGenerateApiKey', {
-      expression: cdk.Fn.conditionEquals(generateApiKey.valueAsString, 'true'),
-    });
-
-    // Initial admin password. Same explicit-parameter convention as
-    // GenerateApiKey above. 24 bytes of crypto/rand encoded as base64url
+    // Initial admin password. 24 bytes of crypto/rand encoded as base64url
     // gives a ~32-char URL-safe string with 192 bits of entropy.
     //
     // First deploy: --parameters GenerateAdminPassword=true
@@ -366,9 +340,6 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
         ANTHROPIC_API_KEY: anthropicApiKey.valueAsString,
-        GENERATED_API_KEY: cdk.Fn.conditionIf(
-          'ShouldGenerateApiKey', generatedApiKey, '',
-        ).toString(),
         GENERATED_ADMIN_PASSWORD: cdk.Fn.conditionIf(
           'ShouldGenerateAdminPassword', generatedAdminPassword, '',
         ).toString(),
@@ -458,12 +429,6 @@ export class InfraStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SkillsBucketName', {
       value: skillsBucket.bucketName,
       description: 'S3 bucket for skill storage',
-    });
-
-    new cdk.CfnOutput(this, 'GeneratedApiKey', {
-      value: generatedApiKey,
-      description: 'SAVE THIS NOW. Use it in the x-api-key header for all API requests.',
-      condition: shouldGenerateApiKey
     });
 
     new cdk.CfnOutput(this, 'GeneratedAdminPassword', {

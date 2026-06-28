@@ -11,14 +11,6 @@ exports[`snapshot 1`] = `
         "true",
       ],
     },
-    "ShouldGenerateApiKey": {
-      "Fn::Equals": [
-        {
-          "Ref": "GenerateApiKey",
-        },
-        "true",
-      ],
-    },
   },
   "Outputs": {
     "ApiUrl": {
@@ -48,11 +40,6 @@ exports[`snapshot 1`] = `
       "Condition": "ShouldGenerateAdminPassword",
       "Description": "SAVE THIS NOW. Initial admin password for the seeded admin user; only shown on this deploy.",
       "Value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    },
-    "GeneratedApiKey": {
-      "Condition": "ShouldGenerateApiKey",
-      "Description": "SAVE THIS NOW. Use it in the x-api-key header for all API requests.",
-      "Value": "00000000-0000-0000-0000-000000000000",
     },
     "ReplyUrl": {
       "Description": "Function URL endpoint (reply/agent)",
@@ -112,15 +99,6 @@ exports[`snapshot 1`] = `
       ],
       "Default": "false",
       "Description": "ALWAYS pass explicitly. true = generate a new admin password (overwrites existing). false = keep existing.",
-      "Type": "String",
-    },
-    "GenerateApiKey": {
-      "AllowedValues": [
-        "true",
-        "false",
-      ],
-      "Default": "false",
-      "Description": "ALWAYS pass explicitly. true = generate new key (overwrites existing). false = keep existing key.",
       "Type": "String",
     },
   },
@@ -432,13 +410,6 @@ exports[`snapshot 1`] = `
               "Fn::If": [
                 "ShouldGenerateAdminPassword",
                 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-                "",
-              ],
-            },
-            "GENERATED_API_KEY": {
-              "Fn::If": [
-                "ShouldGenerateApiKey",
-                "00000000-0000-0000-0000-000000000000",
                 "",
               ],
             },
