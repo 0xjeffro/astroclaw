@@ -20,7 +20,7 @@ func run() int {
 		Use:   "astroclaw",
 		Short: "Astroclaw CLI",
 	}
-	rootCmd.AddCommand(loginCmd(), workspacesCmd(), whoamiCmd())
+	rootCmd.AddCommand(loginCmd(), workspacesCmd(), whoamiCmd(), chatCmd())
 
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		return 1

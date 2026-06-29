@@ -85,13 +85,6 @@ func init() {
 	//	apiKey = apiKeyCred.Value
 	//}
 
-	var p provider.Provider
-	model := os.Getenv("MODEL_NAME")
-	if model == "" {
-		model = "claude-sonnet-4-20250514"
-	}
-	p = provider.NewAnthropic(llmCred.Value, model)
-
 	agentsSvc := agents.NewService(pool)
 	settingsSvc := settings.NewService(pool)
 	notesSvc := notes.NewService(pool)
@@ -102,11 +95,18 @@ func init() {
 	skillsBucket := os.Getenv("SKILLS_BUCKET")
 
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
-		// Load agent profile dynamically per request.
+		// Load agent profile dynamically per request so changes to
+		// app_agents_profiles (model, soul, etc.) take effect on next
+		// invocation without redeploying.
 		agentProfile, err := agentsSvc.GetAgentFromWorkspace(context.Background(), s.WorkspaceID, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
+
+		// Build a per-request provider using the model from this
+		// agent's row. Different agents in the same workspace can use
+		// different models.
+		p := provider.NewAnthropic(llmCred.Value, agentProfile.Model)
 
 		systemPrompt := buildPrompt(context.Background(), s.WorkspaceID, agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
 

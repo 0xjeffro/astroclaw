@@ -393,7 +393,7 @@ func seedDefaultAgent(ctx context.Context, sysSvc *system.Service, svc *agents.S
 		"Be concise when needed, thorough when it matters."
 
 	// TODO: model should come from CDK parameter or environment variable or some other way instead of hardcoded.
-	a, err := svc.CreateAgent(ctx, workspaceID, "genesis", defaultSoul, "claude-sonnet-4-20250514")
+	a, err := svc.CreateAgent(ctx, workspaceID, "genesis", defaultSoul, "claude-haiku-4-5-20251001")
 	if err != nil {
 		return fmt.Errorf("seed genesis agent: %w", err)
 	}

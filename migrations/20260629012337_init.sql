@@ -3,7 +3,7 @@ CREATE TABLE "public"."app_agents_profiles" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
   "name" text NOT NULL,
   "soul" text NOT NULL DEFAULT '',
-  "model" text NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+  "model" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
   "deleted_at" timestamptz NULL,

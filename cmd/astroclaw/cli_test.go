@@ -18,13 +18,21 @@ func TestMain(m *testing.M) {
 }
 
 // TestScripts runs every .txtar in testdata/scripts/ against a real
-// deployed backend. The deploy URL and admin password come from
-// ASTROCLAW_API_URL and ASTROCLAW_ADMIN_PASSWORD; when either is missing the suite
-// is skipped so plain `go test ./...` stays green.
+// deployed backend. URLs and admin password come from ASTROCLAW_API_URL,
+// ASTROCLAW_REPLY_URL, and ASTROCLAW_ADMIN_PASSWORD; when any is missing
+// the suite is skipped so plain `go test ./...` stays green.
+//
+// REPLY_URL is only needed by the chat .txtar scenarios; scenarios that
+// do not use chat still run if it is missing, but for simplicity all
+// three env vars are required up front.
 func TestScripts(t *testing.T) {
 	apiURL := os.Getenv("ASTROCLAW_API_URL")
 	if apiURL == "" {
 		t.Skip("ASTROCLAW_API_URL not set; skipping e2e suite")
+	}
+	replyURL := os.Getenv("ASTROCLAW_REPLY_URL")
+	if replyURL == "" {
+		t.Skip("ASTROCLAW_REPLY_URL not set; skipping e2e suite")
 	}
 	adminPassword := os.Getenv("ASTROCLAW_ADMIN_PASSWORD")
 	if adminPassword == "" {
@@ -35,6 +43,7 @@ func TestScripts(t *testing.T) {
 		Dir: "testdata/scripts",
 		Setup: func(env *testscript.Env) error {
 			env.Setenv("ASTROCLAW_API_URL", apiURL)
+			env.Setenv("ASTROCLAW_REPLY_URL", replyURL)
 			env.Setenv("ASTROCLAW_ADMIN_PASSWORD", adminPassword)
 			return nil
 		},

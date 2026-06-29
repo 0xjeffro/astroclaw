@@ -5,7 +5,7 @@ CREATE TABLE app_agents_profiles (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name       TEXT NOT NULL,
     soul       TEXT NOT NULL DEFAULT '',
-    model      TEXT NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+    model      TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ

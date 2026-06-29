@@ -1,0 +1,23 @@
+# End-to-end smoke test of the agent / skill pipeline.
+#
+# Sends the magic incantation ::__ASTRO_CLAW_SPELL__:: to the default
+# agent. The seeded skill at skills/@test/magic-spell tells the LLM to
+# respond with a fixed status block, which makes the reply deterministic
+# enough to assert on.
+#
+# This proves the whole path works: skill is seeded to S3, loaded into
+# the agent prompt, the LLM recognises the trigger and emits the block,
+# and the Reply Lambda streams the final text back via HTTP.
+
+# Log in to get a token.
+exec astroclaw login --email admin@astroclaw.local
+stdout '^eyJ'
+cp stdout token.txt
+setenvfile ASTROCLAW_TOKEN token.txt
+
+# Send the magic word. The agent's reply should contain the fixed block.
+exec astroclaw chat '::__ASTRO_CLAW_SPELL__::'
+stdout 'AstroClaw v0.1.0'
+stdout 'Status: ONLINE'
+stdout 'Skills: LOADED'
+stdout 'Spell: ACTIVATED'
