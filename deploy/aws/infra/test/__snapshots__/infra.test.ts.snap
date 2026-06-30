@@ -126,10 +126,19 @@ exports[`snapshot 1`] = `
                 "Endpoint",
               ],
             },
-            "PASSWORDS_KMS_KEY_ID": {
-              "Fn::GetAtt": [
-                "PasswordsKeyC846CE1E",
-                "Arn",
+            "KMS_URL": {
+              "Fn::Join": [
+                "",
+                [
+                  "awskms://",
+                  {
+                    "Ref": "PasswordsKeyC846CE1E",
+                  },
+                  "?region=",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                ],
               ],
             },
           },
@@ -413,10 +422,19 @@ exports[`snapshot 1`] = `
                 "",
               ],
             },
-            "PASSWORDS_KMS_KEY_ID": {
-              "Fn::GetAtt": [
-                "PasswordsKeyC846CE1E",
-                "Arn",
+            "KMS_URL": {
+              "Fn::Join": [
+                "",
+                [
+                  "awskms://",
+                  {
+                    "Ref": "PasswordsKeyC846CE1E",
+                  },
+                  "?region=",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                ],
               ],
             },
             "SKILLS_BUCKET": {
@@ -741,10 +759,19 @@ exports[`snapshot 1`] = `
                 "Endpoint",
               ],
             },
-            "PASSWORDS_KMS_KEY_ID": {
-              "Fn::GetAtt": [
-                "PasswordsKeyC846CE1E",
-                "Arn",
+            "KMS_URL": {
+              "Fn::Join": [
+                "",
+                [
+                  "awskms://",
+                  {
+                    "Ref": "PasswordsKeyC846CE1E",
+                  },
+                  "?region=",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                ],
               ],
             },
             "SKILLS_BUCKET": {
