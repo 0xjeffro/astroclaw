@@ -39,7 +39,6 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -92,7 +91,10 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
 	}
-	km := crypto.NewAWSKMSKeyManager(kms.NewFromConfig(awsCfg), os.Getenv("PASSWORDS_KMS_KEY_ID"))
+	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
+	if err != nil {
+		return nil, fmt.Errorf("open key manager: %w", err)
+	}
 	pwSvc := passwords.NewService(pool, km)
 	sysSvc := system.NewService(pool, system.WithProvisioner(pwSvc))
 	agentsSvc := agents.NewService(pool)

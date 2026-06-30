@@ -29,7 +29,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
@@ -66,7 +65,10 @@ func init() {
 	})
 
 	// Read credentials.
-	km := crypto.NewAWSKMSKeyManager(kms.NewFromConfig(awsCfg), os.Getenv("PASSWORDS_KMS_KEY_ID"))
+	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
+	if err != nil {
+		log.Fatalf("open key manager: %v", err)
+	}
 	pwSvc := passwords.NewService(pool, km)
 
 	// TODO: Here we should design a more flexible way to obtain the LLM API key.

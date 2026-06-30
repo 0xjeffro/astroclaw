@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -240,7 +241,7 @@ func TestStrictDecoding(t *testing.T) {
 func TestVariant(t *testing.T) {
 	// Hash contains wrong variant
 	_, _, err := CheckHash("pa$$word", "$argon2i$v=19$m=65536,t=1,p=2$mFe3kxhovyEByvwnUtr0ow$nU9AqnoPfzMOQhCHa9BDrQ+4bSfj69jgtvGu/2McCxU")
-	if err != ErrIncompatibleVariant {
+	if !errors.Is(err, ErrIncompatibleVariant) {
 		t.Fatalf("expected error %s", ErrIncompatibleVariant)
 	}
 }

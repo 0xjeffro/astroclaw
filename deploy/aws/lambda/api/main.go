@@ -13,8 +13,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 )
@@ -32,11 +30,10 @@ func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
-		log.Fatalf("load AWS config: %v", err)
+		log.Fatalf("open key manager: %v", err)
 	}
-	km := crypto.NewAWSKMSKeyManager(kms.NewFromConfig(awsCfg), os.Getenv("PASSWORDS_KMS_KEY_ID"))
 	pwSvc := passwords.NewService(pool, km)
 	secretLoader := auth.NewSecretLoader(pwSvc)
 
