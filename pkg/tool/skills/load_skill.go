@@ -9,14 +9,13 @@ import (
 
 	appskills "astroclaw/pkg/app/skills"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"gocloud.dev/blob"
 )
 
 // Tool implements the load_skill tool that agents use to load skill content.
 type Tool struct {
 	Skills      *appskills.Service
-	S3Client    *s3.Client
-	Bucket      string
+	Bucket      *blob.Bucket
 	WorkspaceID string
 }
 
@@ -88,7 +87,7 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	// If a specific file is requested, read just that file.
 	file := strings.TrimSpace(parsed.File)
 	if file != "" {
-		content, err := t.readS3File(ctx, author, name, skill.Version, file)
+		content, err := t.readFile(ctx, author, name, skill.Version, file)
 		if err != nil {
 			return fmt.Sprintf("error: could not read %s: %v", file, err), nil
 		}
@@ -96,13 +95,13 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	}
 
 	// Default: return SKILL.md content + file listing.
-	skillMD, err := t.readS3File(ctx, author, name, skill.Version, "SKILL.md")
+	skillMD, err := t.readFile(ctx, author, name, skill.Version, "SKILL.md")
 	if err != nil {
 		return fmt.Sprintf("error: could not read SKILL.md: %v", err), nil
 	}
 
 	// List all files in the skill directory.
-	files, err := t.listS3Files(ctx, author, name, skill.Version)
+	files, err := t.listFiles(ctx, author, name, skill.Version)
 	if err != nil {
 		return fmt.Sprintf("error: could not list files: %v", err), nil
 	}
@@ -124,45 +123,33 @@ func (t *Tool) Execute(ctx context.Context, args string) (string, error) {
 	return b.String(), nil
 }
 
-// readS3File reads a single file from the skill's S3 directory.
-// TODO: abstract S3 calls behind a storage interface for multi-cloud support.
+// readFile reads a single file from the skill's storage directory.
 // TODO: add a size limit (io.LimitReader) so a huge file doesn't eat all Lambda memory.
-// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#Client.GetObject
-func (t *Tool) readS3File(ctx context.Context, author, name, version, file string) (string, error) {
-	resp, err := t.S3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: &t.Bucket,
-		Key:    new(fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, file)),
-	})
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
+func (t *Tool) readFile(ctx context.Context, author, name, version, file string) (string, error) {
+	key := fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, file)
+	data, err := t.Bucket.ReadAll(ctx, key)
 	if err != nil {
 		return "", err
 	}
 	return string(data), nil
 }
 
-// listS3Files lists all files under a skill's S3 prefix.
-// TODO: this only returns the first 1000 files. Fine for skills (they're small),
-// but should use a paginator if skills ever get that big.
-// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#Client.ListObjectsV2
-func (t *Tool) listS3Files(ctx context.Context, author, name, version string) ([]string, error) {
+// listFiles lists all files under a skill's storage prefix.
+// TODO: this only returns the first page. Fine for skills (they're small),
+// but should iterate fully if a skill ever ships with more than a page of files.
+func (t *Tool) listFiles(ctx context.Context, author, name, version string) ([]string, error) {
 	prefix := fmt.Sprintf("skills/%s/%s/%s/", author, name, version)
-	resp, err := t.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: &t.Bucket,
-		Prefix: &prefix,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+	iter := t.Bucket.List(&blob.ListOptions{Prefix: prefix})
 	var files []string
-	for _, obj := range resp.Contents {
-		// Strip the prefix to get relative paths.
-		relPath := strings.TrimPrefix(*obj.Key, prefix)
+	for {
+		obj, err := iter.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		relPath := strings.TrimPrefix(obj.Key, prefix)
 		if relPath != "" {
 			files = append(files, relPath)
 		}

@@ -437,8 +437,20 @@ exports[`snapshot 1`] = `
                 ],
               ],
             },
-            "SKILLS_BUCKET": {
-              "Ref": "SkillsBucket512669F8",
+            "STORAGE_URL": {
+              "Fn::Join": [
+                "",
+                [
+                  "s3://",
+                  {
+                    "Ref": "SkillsBucket512669F8",
+                  },
+                  "?region=",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                ],
+              ],
             },
           },
         },
@@ -774,8 +786,20 @@ exports[`snapshot 1`] = `
                 ],
               ],
             },
-            "SKILLS_BUCKET": {
-              "Ref": "SkillsBucket512669F8",
+            "STORAGE_URL": {
+              "Fn::Join": [
+                "",
+                [
+                  "s3://",
+                  {
+                    "Ref": "SkillsBucket512669F8",
+                  },
+                  "?region=",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                ],
+              ],
             },
             "WS_ENDPOINT": {
               "Fn::Join": [

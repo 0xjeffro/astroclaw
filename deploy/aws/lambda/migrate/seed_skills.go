@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -12,20 +11,15 @@ import (
 	"astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"gocloud.dev/blob"
 )
 
 // seedDefaultSkills reads skill directories bundled with the Lambda,
-// uploads each file to S3 under skills/{author}/{name}/{version}/...,
-// and writes a per-workspace installation record to DSQL.
-// Skips skills that already exist in the database.
-func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *skills.Service, s3Client *s3.Client) error {
-	bucket := os.Getenv("SKILLS_BUCKET")
-	if bucket == "" {
-		log.Println("SKILLS_BUCKET not set, skipping skill seeding")
-		return nil
-	}
-
+// uploads each file to the storage bucket under
+// skills/{author}/{name}/{version}/..., and writes a per-workspace
+// installation record to DSQL. Skips skills that already exist in the
+// database.
+func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *skills.Service, bucket *blob.Bucket) error {
 	// Find the default workspace (the admin's first workspace).
 	admin, err := sysSvc.GetAdmin(ctx)
 	if err != nil {
@@ -79,17 +73,19 @@ func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *s
 			}
 			description, whenToUse, version := parseFrontmatter(string(content))
 
-			// Upload S3 first, then write DB. DB is the source of truth for the agent at runtime:
-			// if a skill has a DB record, the agent expects its
-			// files to fully exist in S3. This ordering ensures:
+			// Upload storage first, then write DB. DB is the source of
+			// truth for the agent at runtime: if a skill has a DB record,
+			// the agent expects its files to fully exist in the bucket.
+			// This ordering ensures:
 			//
-			// Scenario A: S3 upload succeeds, DB write fails
-			// Skill is invisible to agent. Next deploy retries and succeeds (S3 PutObject is idempotent).
+			// Scenario A: storage upload succeeds, DB write fails
+			// Skill is invisible to agent. Next deploy retries and
+			// succeeds (WriteAll is idempotent).
 			//
-			// Scenario B: S3 partially uploads, then fails
+			// Scenario B: storage partially uploads, then fails
 			// Same as A. Skill invisible, next deploy overwrites all files.
-			if err := uploadSkillFiles(ctx, s3Client, bucket, author, skillName, version, skillDir); err != nil {
-				log.Printf("upload %s/%s to S3: %v", author, skillName, err)
+			if err := uploadSkillFiles(ctx, bucket, author, skillName, version, skillDir); err != nil {
+				log.Printf("upload %s/%s to storage: %v", author, skillName, err)
 				continue
 			}
 
@@ -107,9 +103,9 @@ func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *s
 	return nil
 }
 
-// uploadSkillFiles uploads all files in a skill directory to S3,
+// uploadSkillFiles uploads all files in a skill directory to the bucket,
 // preserving the directory structure under skills/{author}/{name}/{version}/.
-func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, name, version, dir string) error {
+func uploadSkillFiles(ctx context.Context, bucket *blob.Bucket, author, name, version, dir string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -118,28 +114,22 @@ func uploadSkillFiles(ctx context.Context, client *s3.Client, bucket, author, na
 			return nil
 		}
 
-		// Build S3 key: skills/@author/name/version/relative-path
 		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
 		}
-		s3Key := fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, relPath)
+		key := fmt.Sprintf("skills/%s/%s/%s/%s", author, name, version, relPath)
 
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		_, err = client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket: &bucket,
-			Key:    &s3Key,
-			Body:   bytes.NewReader(data),
-		})
-		if err != nil {
-			return fmt.Errorf("put %s: %w", s3Key, err)
+		if err := bucket.WriteAll(ctx, key, data, nil); err != nil {
+			return fmt.Errorf("put %s: %w", key, err)
 		}
 
-		log.Printf("  uploaded: %s", s3Key)
+		log.Printf("  uploaded: %s", key)
 		return nil
 	})
 }

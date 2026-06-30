@@ -278,7 +278,7 @@ export class InfraStack extends cdk.Stack {
       environment: {
         DSQL_ENDPOINT: cluster.attrEndpoint,
         WS_ENDPOINT: wsStage.callbackUrl,
-        SKILLS_BUCKET: skillsBucket.bucketName,
+        STORAGE_URL: `s3://${skillsBucket.bucketName}?region=${this.region}`,
         KMS_URL: `awskms://${passwordsKey.keyId}?region=${this.region}`,
       },
       timeout: cdk.Duration.minutes(15),
@@ -343,7 +343,7 @@ export class InfraStack extends cdk.Stack {
         GENERATED_ADMIN_PASSWORD: cdk.Fn.conditionIf(
           'ShouldGenerateAdminPassword', generatedAdminPassword, '',
         ).toString(),
-        SKILLS_BUCKET: skillsBucket.bucketName,
+        STORAGE_URL: `s3://${skillsBucket.bucketName}?region=${this.region}`,
         KMS_URL: `awskms://${passwordsKey.keyId}?region=${this.region}`,
       },
       timeout: cdk.Duration.minutes(5),

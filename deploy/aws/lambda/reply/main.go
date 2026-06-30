@@ -11,6 +11,7 @@ import (
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/crypto"
 	"astroclaw/pkg/provider"
+	"astroclaw/pkg/storage"
 	"astroclaw/pkg/tool"
 	toolskills "astroclaw/pkg/tool/skills"
 	"astroclaw/pkg/tool/webfetch"
@@ -29,7 +30,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
@@ -92,9 +92,12 @@ func init() {
 	notesSvc := notes.NewService(pool)
 	skillsSvc := appskills.NewService(pool)
 
-	// S3 client for skill file storage.
-	s3Client := s3.NewFromConfig(awsCfg)
-	skillsBucket := os.Getenv("SKILLS_BUCKET")
+	// Bucket for skill file storage. URL-driven so the same code path
+	// runs against S3, SeaweedFS, local FS, or in-memory.
+	bucket, err := storage.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
+	if err != nil {
+		log.Fatalf("open storage bucket: %v", err)
+	}
 
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
 		// Load agent profile dynamically per request so changes to
@@ -133,8 +136,7 @@ func init() {
 		registry.Register(webfetch.New())
 		registry.Register(&toolskills.Tool{
 			Skills:      skillsSvc,
-			S3Client:    s3Client,
-			Bucket:      skillsBucket,
+			Bucket:      bucket,
 			WorkspaceID: s.WorkspaceID,
 		})
 

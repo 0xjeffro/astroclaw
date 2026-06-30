@@ -36,10 +36,9 @@ import (
 	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/crypto"
+	"astroclaw/pkg/storage"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,20 +86,21 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	// is written, and the passwords service must be injected into
 	// system.Service so CreateUser and CreateWorkspace can provision
 	// per-entity data keys.
-	awsCfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load AWS config: %w", err)
-	}
 	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
 		return nil, fmt.Errorf("open key manager: %w", err)
 	}
+	bucket, err := storage.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
+	if err != nil {
+		return nil, fmt.Errorf("open storage bucket: %w", err)
+	}
+	defer bucket.Close()
+
 	pwSvc := passwords.NewService(pool, km)
 	sysSvc := system.NewService(pool, system.WithProvisioner(pwSvc))
 	agentsSvc := agents.NewService(pool)
 	settingsSvc := settings.NewService(pool)
 	skillsSvc := appskills.NewService(pool)
-	s3Client := s3.NewFromConfig(awsCfg)
 
 	if err := seedSystemDataKey(ctx, pwSvc); err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 		return nil, err
 	}
 
-	if err := seedDefaultSkills(ctx, sysSvc, skillsSvc, s3Client); err != nil {
+	if err := seedDefaultSkills(ctx, sysSvc, skillsSvc, bucket); err != nil {
 		return nil, err
 	}
 
