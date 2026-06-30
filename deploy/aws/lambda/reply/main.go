@@ -10,6 +10,8 @@ import (
 	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/cloud"
+	"astroclaw/pkg/cloud/wsbus"
+	wsaws "astroclaw/pkg/cloud/wsbus/aws"
 	"astroclaw/pkg/provider"
 	"astroclaw/pkg/tool"
 	toolskills "astroclaw/pkg/tool/skills"
@@ -28,14 +30,13 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
-	apigwtypes "github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
 var (
-	svc         *chat.Service
-	systemSvc   *system.Service
-	apigwClient *apigatewaymanagementapi.Client
+	svc      *chat.Service
+	bus      wsbus.Bus
+	registry wsbus.Registry
 )
 
 // Init runs once when Lambda cold-starts. Connects to DSQL, sets up
@@ -51,17 +52,21 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	systemSvc = system.NewService(pool)
+	systemSvc := system.NewService(pool)
+	registry = wsaws.NewRegistry(systemSvc)
 
-	// API Gateway Management API client for pushing WebSocket events.
+	// AWS-specific WebSocket bus: API Gateway holds the socket, we push
+	// via PostToConnection. WS_ENDPOINT is the @connections endpoint of
+	// the deployed WS stage.
 	// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Fatalf("load AWS config: %v", err)
 	}
-	apigwClient = apigatewaymanagementapi.NewFromConfig(awsCfg, func(o *apigatewaymanagementapi.Options) {
+	apigwClient := apigatewaymanagementapi.NewFromConfig(awsCfg, func(o *apigatewaymanagementapi.Options) {
 		o.BaseEndpoint = new(os.Getenv("WS_ENDPOINT"))
 	})
+	bus = wsaws.NewBus(apigwClient)
 
 	// Read credentials.
 	km, err := cloud.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
@@ -253,9 +258,10 @@ func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error)
 	}, nil
 }
 
-// pushToSession pushes a WebSocket event to all connected members of a session.
-// It queries session members, looks up each member's active connections, and
-// calls PostToConnection for each one. Dead connections (410 Gone) are cleaned up.
+// pushToSession pushes a WebSocket event to all connected members of a
+// session. Session-to-user mapping comes from chat, user-to-connection
+// from the wsbus.Registry, and per-connection delivery from wsbus.Bus.
+// Stale connections (ErrConnGone from Bus.Send) are unregistered.
 func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
 	members, err := svc.ListSessionMembers(ctx, sessionID)
 	if err != nil {
@@ -270,26 +276,20 @@ func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
 	}
 
 	for _, m := range members {
-		conns, err := systemSvc.GetConnectionsByUser(ctx, m.UserID)
+		conns, err := registry.GetByUser(ctx, m.UserID)
 		if err != nil {
 			log.Printf("pushToSession: get connections for user %s: %v", m.UserID, err)
 			continue
 		}
 		for _, c := range conns {
-			_, err := apigwClient.PostToConnection(ctx, &apigatewaymanagementapi.PostToConnectionInput{
-				ConnectionId: &c.ConnectionID,
-				Data:         payload,
-			})
+			err := bus.Send(ctx, c, payload)
+			if errors.Is(err, wsbus.ErrConnGone) {
+				log.Printf("pushToSession: connection %s is gone, cleaning up", c)
+				_ = registry.Unregister(ctx, c)
+				continue
+			}
 			if err != nil {
-				// 410 Gone means the client disconnected but $disconnect didn't fire.
-				// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
-				// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi/types#GoneException
-				if _, ok := errors.AsType[*apigwtypes.GoneException](err); ok {
-					log.Printf("pushToSession: connection %s is gone, cleaning up", c.ConnectionID)
-					_ = systemSvc.DeleteWSConnectRecord(ctx, c.ConnectionID)
-					continue
-				}
-				log.Printf("pushToSession: post to connection %s: %v", c.ConnectionID, err)
+				log.Printf("pushToSession: post to connection %s: %v", c, err)
 			}
 		}
 	}

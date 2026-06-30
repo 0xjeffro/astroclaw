@@ -21,13 +21,15 @@ import (
 	"os"
 
 	"astroclaw/pkg/app/system"
+	"astroclaw/pkg/cloud/wsbus"
+	wsaws "astroclaw/pkg/cloud/wsbus/aws"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 )
 
-var systemSvc *system.Service
+var registry wsbus.Registry
 
 func init() {
 	ctx := context.Background()
@@ -39,13 +41,13 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	systemSvc = system.NewService(pool)
+	registry = wsaws.NewRegistry(system.NewService(pool))
 }
 
 func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
 	connectionID := req.RequestContext.ConnectionID
 
-	if err := systemSvc.DeleteWSConnectRecord(ctx, connectionID); err != nil {
+	if err := registry.Unregister(ctx, connectionID); err != nil {
 		log.Printf("failed to delete connection %s: %v", connectionID, err)
 	}
 
