@@ -7,7 +7,7 @@ import (
 	"astroclaw/pkg/app/settings"
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/auth"
-	"astroclaw/pkg/crypto"
+	"astroclaw/pkg/cloud"
 	"context"
 	"log"
 	"os"
@@ -30,7 +30,7 @@ func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
+	km, err := cloud.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
 		log.Fatalf("open key manager: %v", err)
 	}

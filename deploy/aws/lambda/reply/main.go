@@ -9,9 +9,8 @@ import (
 	"astroclaw/pkg/app/settings"
 	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
-	"astroclaw/pkg/crypto"
+	"astroclaw/pkg/cloud"
 	"astroclaw/pkg/provider"
-	"astroclaw/pkg/storage"
 	"astroclaw/pkg/tool"
 	toolskills "astroclaw/pkg/tool/skills"
 	"astroclaw/pkg/tool/webfetch"
@@ -65,7 +64,7 @@ func init() {
 	})
 
 	// Read credentials.
-	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
+	km, err := cloud.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
 		log.Fatalf("open key manager: %v", err)
 	}
@@ -94,7 +93,7 @@ func init() {
 
 	// Bucket for skill file storage. URL-driven so the same code path
 	// runs against S3, SeaweedFS, local FS, or in-memory.
-	bucket, err := storage.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
+	bucket, err := cloud.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
 	if err != nil {
 		log.Fatalf("open storage bucket: %v", err)
 	}

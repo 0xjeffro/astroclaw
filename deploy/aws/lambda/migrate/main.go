@@ -35,8 +35,7 @@ import (
 	"astroclaw/pkg/app/settings"
 	appskills "astroclaw/pkg/app/skills"
 	"astroclaw/pkg/app/system"
-	"astroclaw/pkg/crypto"
-	"astroclaw/pkg/storage"
+	"astroclaw/pkg/cloud"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
@@ -86,11 +85,11 @@ func handler(ctx context.Context, event Event) (*Result, error) {
 	// is written, and the passwords service must be injected into
 	// system.Service so CreateUser and CreateWorkspace can provision
 	// per-entity data keys.
-	km, err := crypto.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
+	km, err := cloud.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
 		return nil, fmt.Errorf("open key manager: %w", err)
 	}
-	bucket, err := storage.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
+	bucket, err := cloud.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
 	if err != nil {
 		return nil, fmt.Errorf("open storage bucket: %w", err)
 	}

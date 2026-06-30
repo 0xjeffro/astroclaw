@@ -1,4 +1,4 @@
-package crypto
+package cloud
 
 import (
 	"context"
@@ -10,33 +10,35 @@ import (
 	// secrets.DefaultMux so OpenKeyManager can dispatch by URL.
 	_ "gocloud.dev/secrets/awskms"
 	_ "gocloud.dev/secrets/localsecrets"
+
+	"astroclaw/pkg/crypto"
 )
 
-// urlKeyManager adapts a gocloud.dev secrets.Keeper to KeyManager.
-type urlKeyManager struct {
+// keyManager adapts a gocloud.dev secrets.Keeper to crypto.KeyManager.
+type keyManager struct {
 	keeper *secrets.Keeper
 }
 
-// OpenKeyManager returns a KeyManager backed by gocloud.dev/secrets, picked
-// by URL scheme. Supported URLs:
+// OpenKeyManager returns a crypto.KeyManager backed by gocloud.dev/secrets,
+// picked by URL scheme. Supported URLs:
 //
 //	awskms://<keyID>?region=<region> AWS KMS, keyID is UUID, alias, or ARN
 //	base64key://<base64-master-key> Local AES-GCM, for tests and demos
 //
 // More drivers (gcpkms, azurekeyvault, hashivault, ...) can be enabled by
 // adding their blank imports to this file.
-func OpenKeyManager(ctx context.Context, url string) (KeyManager, error) {
+func OpenKeyManager(ctx context.Context, url string) (crypto.KeyManager, error) {
 	keeper, err := secrets.OpenKeeper(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("open keeper %q: %w", url, err)
 	}
-	return &urlKeyManager{keeper: keeper}, nil
+	return &keyManager{keeper: keeper}, nil
 }
 
-func (k *urlKeyManager) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
+func (k *keyManager) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 	return k.keeper.Encrypt(ctx, plaintext)
 }
 
-func (k *urlKeyManager) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
+func (k *keyManager) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
 	return k.keeper.Decrypt(ctx, ciphertext)
 }

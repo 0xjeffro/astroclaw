@@ -1,7 +1,9 @@
-// Package storage is a thin wrapper around gocloud.dev/blob so the rest of
-// the codebase can speak one URL-driven object storage API regardless of
-// where it is deployed.
-package storage
+// Package cloud is the bridge between this codebase and any cloud (or
+// non-cloud) provider that exposes blob storage, KMS-style envelope
+// encryption, message queues, or runtime configuration. Every helper here
+// is URL-driven and dispatched by gocloud.dev so deploy targets can swap
+// implementations without touching business code.
+package cloud
 
 import (
 	"context"
@@ -24,7 +26,8 @@ import (
 //	file:///<absolute-dir> local filesystem, for single-container demo
 //	mem:// in-process, for tests
 //
-// More drivers (gcsblob, azureblob, ...) can be enabled by adding their blank imports to this file.
+// More drivers (gcsblob, azureblob, ...) can be enabled by adding their
+// blank imports to this file.
 func OpenBucket(ctx context.Context, url string) (*blob.Bucket, error) {
 	b, err := blob.OpenBucket(ctx, url)
 	if err != nil {
