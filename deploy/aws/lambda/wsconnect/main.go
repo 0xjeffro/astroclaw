@@ -27,7 +27,6 @@ import (
 
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/cloud/wsbus"
-	wsaws "astroclaw/pkg/cloud/wsbus/aws"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -35,9 +34,9 @@ import (
 )
 
 var (
-	systemSvc *system.Service
-	registry  wsbus.Registry
-	apiKey    string
+	systemSvc  *system.Service
+	wsRegistry wsbus.Registry
+	apiKey     string
 )
 
 func init() {
@@ -63,7 +62,7 @@ func init() {
 	//}
 
 	systemSvc = system.NewService(pool)
-	registry = wsaws.NewRegistry(systemSvc)
+	wsRegistry = wsbus.NewWsRegistry(systemSvc)
 }
 
 func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -91,7 +90,7 @@ func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (e
 
 	// Store connection.
 	connectionID := req.RequestContext.ConnectionID
-	if err := registry.Register(ctx, connectionID, userID, workspaceID); err != nil {
+	if err := wsRegistry.Register(ctx, connectionID, userID, workspaceID); err != nil {
 		log.Printf("failed to store connection %s: %v", connectionID, err)
 		return events.APIGatewayProxyResponse{StatusCode: 500}, nil
 	}

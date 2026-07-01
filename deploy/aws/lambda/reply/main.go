@@ -34,9 +34,9 @@ import (
 )
 
 var (
-	svc      *chat.Service
-	bus      wsbus.Bus
-	registry wsbus.Registry
+	svc        *chat.Service
+	bus        wsbus.Bus
+	wsRegistry wsbus.Registry
 )
 
 // Init runs once when Lambda cold-starts. Connects to DSQL, sets up
@@ -53,7 +53,7 @@ func init() {
 	}
 
 	systemSvc := system.NewService(pool)
-	registry = wsaws.NewRegistry(systemSvc)
+	wsRegistry = wsbus.NewWsRegistry(systemSvc)
 
 	// AWS-specific WebSocket bus: API Gateway holds the socket, we push
 	// via PostToConnection. WS_ENDPOINT is the @connections endpoint of
@@ -119,33 +119,33 @@ func init() {
 
 		systemPrompt := buildPrompt(context.Background(), s.WorkspaceID, agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
 
-		registry := tool.NewRegistry()
-		registry.Register(&tool.TimeTool{})
-		registry.Register(&tool.ArithmeticTool{})
-		registry.Register(&tool.ReadFileTool{})
+		toolRegistry := tool.NewRegistry()
+		toolRegistry.Register(&tool.TimeTool{})
+		toolRegistry.Register(&tool.ArithmeticTool{})
+		toolRegistry.Register(&tool.ReadFileTool{})
 		// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
 		// use ExecCommand to access DSQL credentials and compromise the database.
-		registry.Register(&tool.ExecCommandTool{})
-		registry.Register(&tool.WriteFileTool{})
-		registry.Register(&tool.EditFileTool{})
-		registry.Register(&tool.MemorySaveTool{
+		toolRegistry.Register(&tool.ExecCommandTool{})
+		toolRegistry.Register(&tool.WriteFileTool{})
+		toolRegistry.Register(&tool.EditFileTool{})
+		toolRegistry.Register(&tool.MemorySaveTool{
 			Store:     &notes.MemoryStoreAdapter{Service: notesSvc},
 			AgentID:   agentID,
 			UserID:    s.UserID,
 			SessionID: s.ID,
 		})
-		registry.Register(&websearch.Tool{
+		toolRegistry.Register(&websearch.Tool{
 			Provider: websearch.NewDuckDuckGoProvider(),
 		})
-		registry.Register(webfetch.New())
-		registry.Register(&toolskills.Tool{
+		toolRegistry.Register(webfetch.New())
+		toolRegistry.Register(&toolskills.Tool{
 			Skills:      skillsSvc,
 			Bucket:      bucket,
 			WorkspaceID: s.WorkspaceID,
 		})
 
 		a := agent.NewFromContext(
-			p, systemPrompt, registry, 128000,
+			p, systemPrompt, toolRegistry, 128000,
 			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
 		)
 
@@ -276,7 +276,7 @@ func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
 	}
 
 	for _, m := range members {
-		conns, err := registry.GetByUser(ctx, m.UserID)
+		conns, err := wsRegistry.GetByUser(ctx, m.UserID)
 		if err != nil {
 			log.Printf("pushToSession: get connections for user %s: %v", m.UserID, err)
 			continue
@@ -285,7 +285,7 @@ func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
 			err := bus.Send(ctx, c, payload)
 			if errors.Is(err, wsbus.ErrConnGone) {
 				log.Printf("pushToSession: connection %s is gone, cleaning up", c)
-				_ = registry.Unregister(ctx, c)
+				_ = wsRegistry.Unregister(ctx, c)
 				continue
 			}
 			if err != nil {

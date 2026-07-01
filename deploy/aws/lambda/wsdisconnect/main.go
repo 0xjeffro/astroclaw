@@ -22,7 +22,6 @@ import (
 
 	"astroclaw/pkg/app/system"
 	"astroclaw/pkg/cloud/wsbus"
-	wsaws "astroclaw/pkg/cloud/wsbus/aws"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -41,7 +40,7 @@ func init() {
 		log.Fatalf("connect to DSQL: %v", err)
 	}
 
-	registry = wsaws.NewRegistry(system.NewService(pool))
+	registry = wsbus.NewWsRegistry(system.NewService(pool))
 }
 
 func handler(ctx context.Context, req events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
