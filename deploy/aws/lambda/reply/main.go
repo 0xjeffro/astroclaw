@@ -29,6 +29,7 @@ import (
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // buildLambdaHandler wires DSQL, wsbus, storage/kms, chat.Service, and
@@ -170,6 +171,10 @@ func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 	replyH.Chat = svc
 
 	r := chi.NewRouter()
+	// Lambda Function URL preserves duplicate slashes literally, so a
+	// client hitting "<url>//sessions/.../reply" arrives here with Path
+	// == "//sessions/...". CleanPath normalises it before routing.
+	r.Use(middleware.CleanPath)
 	r.Post("/sessions/{sessionID}/reply", replyH.ServeHTTP)
 
 	return httpadapter.NewV2(r)
