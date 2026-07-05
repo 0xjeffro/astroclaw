@@ -2,6 +2,7 @@ package main
 
 import (
 	"astroclaw/pkg/agent"
+	"astroclaw/pkg/api"
 	"astroclaw/pkg/app/agents"
 	"astroclaw/pkg/app/chat"
 	"astroclaw/pkg/app/notes"
@@ -18,31 +19,22 @@ import (
 	"astroclaw/pkg/tool/webfetch"
 	"astroclaw/pkg/tool/websearch"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"strings"
 
-	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	"github.com/awslabs/aurora-dsql-connectors/go/pgx/dsql"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
+	"github.com/go-chi/chi/v5"
 )
 
-var (
-	svc        *chat.Service
-	bus        wsbus.Bus
-	wsRegistry wsbus.Registry
-)
-
-// Init runs once when Lambda cold-starts. Connects to DSQL, sets up
-// credentials and chat service. System prompt is built per-session
-// in createFn so it always reads the latest settings and memories.
-func init() {
+// buildLambdaHandler wires DSQL, wsbus, storage/kms, chat.Service, and
+// the api.ReplyHandler, then mounts POST /sessions/{sessionID}/reply on
+// a chi router and returns a Lambda-compatible adapter.
+func buildLambdaHandler() *httpadapter.HandlerAdapterV2 {
 	ctx := context.Background()
 
 	pool, err := dsql.NewPool(ctx, dsql.Config{
@@ -53,12 +45,11 @@ func init() {
 	}
 
 	systemSvc := system.NewService(pool)
-	wsRegistry = wsbus.NewWsRegistry(systemSvc)
+	wsRegistry := wsbus.NewWsRegistry(systemSvc)
 
 	// AWS-specific WebSocket bus: API Gateway holds the socket, we push
 	// via PostToConnection. WS_ENDPOINT is the @connections endpoint of
 	// the deployed WS stage.
-	// https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-how-to-call-websocket-api-connections.html
 	awsCfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Fatalf("load AWS config: %v", err)
@@ -66,65 +57,52 @@ func init() {
 	apigwClient := apigatewaymanagementapi.NewFromConfig(awsCfg, func(o *apigatewaymanagementapi.Options) {
 		o.BaseEndpoint = new(os.Getenv("WS_ENDPOINT"))
 	})
-	bus = wsaws.NewBus(apigwClient)
+	bus := wsaws.NewBus(apigwClient)
 
-	// Read credentials.
+	// Credentials.
 	km, err := cloud.OpenKeyManager(ctx, os.Getenv("KMS_URL"))
 	if err != nil {
 		log.Fatalf("open key manager: %v", err)
 	}
 	pwSvc := passwords.NewService(pool, km)
 
-	// TODO: Here we should design a more flexible way to obtain the LLM API key.
-	// For exp, if anti's is not set, fall back to openai. This should be accompanied by some config files to set how the fallback should be handled.
-	// Another point is, it the user has configured their own key, it should take priority over the user's own.
-	// Furthermore, if the user's key is down, we should fall back to the system's key instead of just erroring out.
 	llmCred, err := pwSvc.GetSystemCredential(ctx, passwords.SystemCredAnthropicAPIKey)
 	if err != nil {
 		log.Fatalf("read LLM API key: %v (deploy with --parameters AnthropicApiKey=sk-ant-xxx)", err)
 	}
-	//
-	//apiKeyCred, err := pwSvc.GetCredentialByName(ctx, "api-key")
-	//if err != nil {
-	//	log.Println("warning: no api-key in credentials table, all requests will be allowed without authentication")
-	//} else {
-	//	apiKey = apiKeyCred.Value
-	//}
 
 	agentsSvc := agents.NewService(pool)
 	settingsSvc := settings.NewService(pool)
 	notesSvc := notes.NewService(pool)
 	skillsSvc := appskills.NewService(pool)
 
-	// Bucket for skill file storage. URL-driven so the same code path
-	// runs against S3, SeaweedFS, local FS, or in-memory.
 	bucket, err := cloud.OpenBucket(ctx, os.Getenv("STORAGE_URL"))
 	if err != nil {
 		log.Fatalf("open storage bucket: %v", err)
 	}
 
+	// ReplyHandler is built before chat.Service because the streaming
+	// callbacks (OnTextDelta / OnToolCall / OnToolResult) call its
+	// PushToSession. Chat is plugged in after chat.NewService returns.
+	replyH := &api.ReplyHandler{
+		Bus:      bus,
+		Registry: wsRegistry,
+	}
+
 	createFn := func(s *chat.Session, agentID string) (*agent.Agent, error) {
-		// Load agent profile dynamically per request so changes to
-		// app_agents_profiles (model, soul, etc.) take effect on next
-		// invocation without redeploying.
 		agentProfile, err := agentsSvc.GetAgentFromWorkspace(context.Background(), s.WorkspaceID, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("agent %q not found: %w", agentID, err)
 		}
 
-		// Build a per-request provider using the model from this
-		// agent's row. Different agents in the same workspace can use
-		// different models.
 		p := provider.NewAnthropic(llmCred.Value, agentProfile.Model)
-
 		systemPrompt := buildPrompt(context.Background(), s.WorkspaceID, agentProfile, s.UserID, settingsSvc, notesSvc, skillsSvc)
 
 		toolRegistry := tool.NewRegistry()
 		toolRegistry.Register(&tool.TimeTool{})
 		toolRegistry.Register(&tool.ArithmeticTool{})
 		toolRegistry.Register(&tool.ReadFileTool{})
-		// TODO: remove ExecCommand tool. In Lambda, a prompt-injected Agent could
-		// use ExecCommand to access DSQL credentials and compromise the database.
+		// TODO: remove ExecCommand. Prompt-injected agent could reach DSQL creds.
 		toolRegistry.Register(&tool.ExecCommandTool{})
 		toolRegistry.Register(&tool.WriteFileTool{})
 		toolRegistry.Register(&tool.EditFileTool{})
@@ -149,8 +127,7 @@ func init() {
 			chat.ToProviderMessages(s.ContextMessages), s.ContextSummary,
 		)
 
-		// Maintain a state snapshot that gets pushed to all WebSocket clients
-		// on every update. Each push is a full snapshot, not a delta.
+		// Snapshot pushed to all WS clients on every agent state update.
 		state := &chat.WSEvent{
 			SessionID: s.ID,
 			AgentID:   agentID,
@@ -160,7 +137,7 @@ func init() {
 		a.OnTextDelta = func(text string) {
 			state.Text += text
 			state.Status = chat.WSStatusStreaming
-			pushToSession(context.Background(), s.ID, *state)
+			replyH.PushToSession(context.Background(), s.ID, *state)
 		}
 
 		a.OnToolCall = func(id, toolName, args string) {
@@ -171,7 +148,7 @@ func init() {
 				Status:    chat.WSToolStatusRunning,
 			})
 			state.Status = chat.WSStatusToolCalling
-			pushToSession(context.Background(), s.ID, *state)
+			replyH.PushToSession(context.Background(), s.ID, *state)
 		}
 
 		a.OnToolResult = func(id, toolName, result string) {
@@ -183,13 +160,19 @@ func init() {
 				}
 			}
 			state.Status = chat.WSStatusStreaming
-			pushToSession(context.Background(), s.ID, *state)
+			replyH.PushToSession(context.Background(), s.ID, *state)
 		}
 
 		return a, nil
 	}
 
-	svc = chat.NewService(pool, createFn)
+	svc := chat.NewService(pool, createFn)
+	replyH.Chat = svc
+
+	r := chi.NewRouter()
+	r.Post("/sessions/{sessionID}/reply", replyH.ServeHTTP)
+
+	return httpadapter.NewV2(r)
 }
 
 func buildPrompt(ctx context.Context, workspaceID string, agentProfile *agents.Agent, userID string, settingsSvc *settings.Service, notesSvc *notes.Service, skillsSvc *appskills.Service) string {
@@ -207,94 +190,6 @@ func buildPrompt(ctx context.Context, workspaceID string, agentProfile *agents.A
 	return agent.BuildSystemPrompt(cfg, agent.DefaultCharLimits())
 }
 
-func handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	//if apiKey != "" && req.Headers["x-api-key"] != apiKey {
-	//	return jsonResponse(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-	//}
-
-	// Extract session ID from path: /sessions/{id}/reply
-	path := req.RequestContext.HTTP.Path
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) != 3 || parts[0] != "sessions" || parts[2] != "reply" || req.RequestContext.HTTP.Method != "POST" {
-		return jsonResponse(http.StatusNotFound, map[string]string{"error": "not found"})
-	}
-	sessionID := parts[1]
-	// TODO: authz — load session, verify caller has access to session.WorkspaceID.
-
-	var body struct {
-		Text    string `json:"text"`
-		AgentID string `json:"agent_id"`
-	}
-	if err := json.Unmarshal([]byte(req.Body), &body); err != nil {
-		return jsonResponse(http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-	}
-
-	reply, err := svc.Reply(ctx, sessionID, body.AgentID, body.Text)
-	if err != nil {
-		pushToSession(ctx, sessionID, chat.WSEvent{
-			SessionID: sessionID,
-			AgentID:   body.AgentID,
-			Status:    chat.WSStatusError,
-			Error:     err.Error(),
-		})
-		return jsonResponse(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-
-	pushToSession(ctx, sessionID, chat.WSEvent{
-		SessionID: sessionID,
-		AgentID:   body.AgentID,
-		Status:    chat.WSStatusDone,
-		Text:      reply,
-	})
-	return jsonResponse(http.StatusOK, map[string]string{"reply": reply})
-}
-
-func jsonResponse(status int, body any) (events.APIGatewayV2HTTPResponse, error) {
-	b, _ := json.Marshal(body)
-	return events.APIGatewayV2HTTPResponse{
-		StatusCode: status,
-		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(b),
-	}, nil
-}
-
-// pushToSession pushes a WebSocket event to all connected members of a
-// session. Session-to-user mapping comes from chat, user-to-connection
-// from the wsbus.Registry, and per-connection delivery from wsbus.Bus.
-// Stale connections (ErrConnGone from Bus.Send) are unregistered.
-func pushToSession(ctx context.Context, sessionID string, event chat.WSEvent) {
-	members, err := svc.ListSessionMembers(ctx, sessionID)
-	if err != nil {
-		log.Printf("pushToSession: list members for session %s: %v", sessionID, err)
-		return
-	}
-
-	payload, err := json.Marshal(event)
-	if err != nil {
-		log.Printf("pushToSession: marshal event: %v", err)
-		return
-	}
-
-	for _, m := range members {
-		conns, err := wsRegistry.GetByUser(ctx, m.UserID)
-		if err != nil {
-			log.Printf("pushToSession: get connections for user %s: %v", m.UserID, err)
-			continue
-		}
-		for _, c := range conns {
-			err := bus.Send(ctx, c, payload)
-			if errors.Is(err, wsbus.ErrConnGone) {
-				log.Printf("pushToSession: connection %s is gone, cleaning up", c)
-				_ = wsRegistry.Unregister(ctx, c)
-				continue
-			}
-			if err != nil {
-				log.Printf("pushToSession: post to connection %s: %v", c, err)
-			}
-		}
-	}
-}
-
 func main() {
-	lambda.Start(handler)
+	lambda.Start(buildLambdaHandler().ProxyWithContext)
 }
