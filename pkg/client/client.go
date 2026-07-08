@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"astroclaw/pkg/app/chat"
@@ -81,7 +82,8 @@ func (c *Client) doAt(ctx context.Context, hc *http.Client, baseURL, method, pat
 		reqBody = bytes.NewReader(buf)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, reqBody)
+	url := strings.TrimRight(baseURL, "/") + path
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("client: build request: %w", err)
 	}
