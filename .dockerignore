@@ -1,0 +1,27 @@
+# Keep the build context tight. Anything not needed at build time slows
+# down `docker build` (context upload) and can defeat layer caching.
+
+.git/
+.github/
+.claude/
+.idea/
+.vscode/
+
+# Node/CDK sub-project — huge, not needed by the Go build.
+deploy/aws/infra/node_modules/
+deploy/aws/infra/cdk.out/
+
+# Draft docs, local scripts.
+draft/
+websites/
+assets/
+
+# Go build artefacts.
+*.exe
+*.test
+*.out
+coverage.*
+
+# Editor droppings.
+.DS_Store
+*.swp
