@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"context"
@@ -13,24 +13,23 @@ import (
 )
 
 // testPools holds two database connections: one for direct SQL execution
-// (the "truth"), one for runMigrations() (the code under test).
+// (the "truth"), one for RunMigrations (the code under test).
 var (
 	directPool   *pgxpool.Pool // Database A: migration SQL executed directly
-	migratedPool *pgxpool.Pool // Database B: migration SQL executed via runMigrations()
+	migratedPool *pgxpool.Pool // Database B: migration SQL executed via RunMigrations
 	migrationDir string        // absolute path to the project's migrations/ directory
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	// Locate the migrations directory (4 levels up from this test file).
-	projectRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	// pkg/bootstrap sits two directories deep, so ../.. reaches the repo root.
+	projectRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		panic("resolve project root: " + err.Error())
 	}
 	migrationDir = filepath.Join(projectRoot, "migrations")
 
-	// Start a PostgreSQL container with two databases.
 	pg, err := postgres.Run(ctx, "postgres:16",
 		postgres.WithDatabase("astroclaw_direct"),
 		postgres.WithUsername("test"),
@@ -42,14 +41,12 @@ func TestMain(m *testing.M) {
 		panic("start PostgreSQL container: " + err.Error())
 	}
 
-	// Connect to the first database (direct execution).
 	connDirect, _ := pg.ConnectionString(ctx, "sslmode=disable")
 	directPool, err = pgxpool.New(ctx, connDirect)
 	if err != nil {
 		panic("connect to direct database: " + err.Error())
 	}
 
-	// Create the second database and connect to it.
 	if _, err := directPool.Exec(ctx, "CREATE DATABASE astroclaw_migrated"); err != nil {
 		panic("create second database: " + err.Error())
 	}
@@ -63,7 +60,7 @@ func TestMain(m *testing.M) {
 		panic("connect to migrated database: " + err.Error())
 	}
 
-	// Database A: execute migration SQL files directly, no runMigrations().
+	// Database A: execute each migration SQL file directly, no RunMigrations.
 	files, _ := filepath.Glob(filepath.Join(migrationDir, "*.sql"))
 	sort.Strings(files)
 	for _, f := range files {
@@ -73,23 +70,10 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	// Database B: execute via runMigrations() (the code under test).
-	// runMigrations() uses filepath.Glob("migrations/*.sql"), so we
-	// chdir to the project root where the migrations/ directory lives.
-	origDir, err := os.Getwd()
-	if err != nil {
-		panic("get working directory: " + err.Error())
-	}
-	if err := os.Chdir(projectRoot); err != nil {
-		panic("chdir to project root: " + err.Error())
-	}
-
-	if err := runMigrations(ctx, migratedPool, false); err != nil {
-		panic("runMigrations: " + err.Error())
-	}
-
-	if err := os.Chdir(origDir); err != nil {
-		panic("chdir back: " + err.Error())
+	// Database B: run via RunMigrations. Pass migrationDir explicitly so
+	// no chdir dance is needed.
+	if err := RunMigrations(ctx, migratedPool, false, migrationDir); err != nil {
+		panic("RunMigrations: " + err.Error())
 	}
 
 	code := m.Run()
@@ -126,8 +110,6 @@ type constraintInfo struct {
 	Type  string // "PRIMARY KEY", "UNIQUE", "CHECK"
 }
 
-// queryColumns returns all user-defined columns from information_schema,
-// sorted by table name and column name for deterministic comparison.
 func queryColumns(ctx context.Context, pool *pgxpool.Pool) ([]columnInfo, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT table_name, column_name, data_type,
@@ -152,7 +134,6 @@ func queryColumns(ctx context.Context, pool *pgxpool.Pool) ([]columnInfo, error)
 	return cols, rows.Err()
 }
 
-// queryIndexes returns all user-defined indexes from pg_indexes.
 func queryIndexes(ctx context.Context, pool *pgxpool.Pool) ([]indexInfo, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT tablename, indexname
@@ -176,7 +157,6 @@ func queryIndexes(ctx context.Context, pool *pgxpool.Pool) ([]indexInfo, error) 
 	return idxs, rows.Err()
 }
 
-// queryConstraints returns all table constraints from information_schema.
 func queryConstraints(ctx context.Context, pool *pgxpool.Pool) ([]constraintInfo, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT table_name, constraint_type
@@ -200,8 +180,8 @@ func queryConstraints(ctx context.Context, pool *pgxpool.Pool) ([]constraintInfo
 	return cons, rows.Err()
 }
 
-// filterTable removes entries belonging to a specific table (used to
-// exclude the _migrations tracking table from Database B).
+// filterXxx strips a specific table (used to exclude _migrations tracking
+// table from Database B).
 func filterColumns(cols []columnInfo, excludeTable string) []columnInfo {
 	var out []columnInfo
 	for _, c := range cols {
@@ -232,13 +212,11 @@ func filterConstraints(cons []constraintInfo, excludeTable string) []constraintI
 	return out
 }
 
-// Verifies that runMigrations() produces the same schema as executing
-// migration SQL files directly. Compares columns (name, type, nullable,
-// default), indexes, and constraints between the two databases.
+// Verifies that RunMigrations produces the same schema as executing
+// migration SQL files directly.
 func TestRunMigrations_SchemaMatchesDirect(t *testing.T) {
 	ctx := context.Background()
 
-	// Compare columns.
 	t.Run("columns", func(t *testing.T) {
 		direct, err := queryColumns(ctx, directPool)
 		if err != nil {
@@ -260,7 +238,6 @@ func TestRunMigrations_SchemaMatchesDirect(t *testing.T) {
 		}
 	})
 
-	// Compare indexes.
 	t.Run("indexes", func(t *testing.T) {
 		direct, err := queryIndexes(ctx, directPool)
 		if err != nil {
@@ -282,7 +259,6 @@ func TestRunMigrations_SchemaMatchesDirect(t *testing.T) {
 		}
 	})
 
-	// Compare constraints (PRIMARY KEY, UNIQUE, CHECK).
 	t.Run("constraints", func(t *testing.T) {
 		direct, err := queryConstraints(ctx, directPool)
 		if err != nil {
@@ -305,41 +281,21 @@ func TestRunMigrations_SchemaMatchesDirect(t *testing.T) {
 	})
 }
 
-// Double check: run runMigrations() again on an already-migrated database.
-// Statements should be skipped via the tracking table, or if tracking fails,
-// caught by the "already exists" error detection. Either way, it should complete without error.
+// Second run should succeed without error — either statements are
+// skipped via the tracking table, or caught by "already exists"
+// detection.
 func TestRunMigrations_SecondRun(t *testing.T) {
 	ctx := context.Background()
-
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working directory: %v", err)
-	}
-	projectRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve project root: %v", err)
-	}
-	if err := os.Chdir(projectRoot); err != nil {
-		t.Fatalf("chdir to project root: %v", err)
-	}
-	defer func() {
-		if err := os.Chdir(origDir); err != nil {
-			t.Errorf("chdir back: %v", err)
-		}
-	}()
-
-	// Second run should succeed with no errors.
-	if err := runMigrations(ctx, migratedPool, false); err != nil {
-		t.Fatalf("second runMigrations failed: %v", err)
+	if err := RunMigrations(ctx, migratedPool, false, migrationDir); err != nil {
+		t.Fatalf("second RunMigrations failed: %v", err)
 	}
 }
 
-// Verifies that the _migrations tracking table has the correct number
-// of records (one per statement in the migration files).
+// Verifies that _migrations has one row per statement in the migration
+// files.
 func TestRunMigrations_TrackingRecords(t *testing.T) {
 	ctx := context.Background()
 
-	// Count expected statements by splitting migration files.
 	files, _ := filepath.Glob(filepath.Join(migrationDir, "*.sql"))
 	sort.Strings(files)
 	expectedCount := 0
@@ -361,8 +317,6 @@ func TestRunMigrations_TrackingRecords(t *testing.T) {
 
 // --- Unit tests for splitStatements ---
 
-// Verifies that multiple DDL statements separated by semicolons
-// are correctly split into individual statements.
 func TestSplitStatements_MultipleStatements(t *testing.T) {
 	input := `CREATE TABLE users (id UUID PRIMARY KEY);
 CREATE TABLE sessions (id UUID PRIMARY KEY);
@@ -377,9 +331,6 @@ CREATE INDEX idx ON sessions(id);`
 	assertStatements(t, stmts, want)
 }
 
-// Verifies that comment-only blocks (no actual SQL) are filtered out.
-// Atlas may prepend directives like "-- atlas:txmode none" that should
-// not be treated as executable statements.
 func TestSplitStatements_CommentOnlyBlock(t *testing.T) {
 	input := `-- atlas:txmode none
 -- this is a comment;
@@ -392,8 +343,6 @@ CREATE TABLE users (id UUID PRIMARY KEY);`
 	assertStatements(t, stmts, want)
 }
 
-// Verifies that comments preceding a SQL statement are preserved as
-// part of the statement, not stripped or treated as a separate block.
 func TestSplitStatements_CommentBeforeSQL(t *testing.T) {
 	input := `-- Create users table
 CREATE TABLE users (id UUID PRIMARY KEY);`
@@ -405,8 +354,6 @@ CREATE TABLE users (id UUID PRIMARY KEY);`
 	assertStatements(t, stmts, want)
 }
 
-// Verifies that a trailing semicolon at the end of the file does not
-// produce an extra empty statement.
 func TestSplitStatements_TrailingSemicolon(t *testing.T) {
 	input := `CREATE TABLE users (id UUID PRIMARY KEY);
 `
@@ -418,7 +365,6 @@ func TestSplitStatements_TrailingSemicolon(t *testing.T) {
 	assertStatements(t, stmts, want)
 }
 
-// Verifies that an empty input returns an empty slice, not nil or panic.
 func TestSplitStatements_EmptyInput(t *testing.T) {
 	stmts := splitStatements("")
 	if len(stmts) != 0 {
@@ -426,7 +372,6 @@ func TestSplitStatements_EmptyInput(t *testing.T) {
 	}
 }
 
-// Verifies that a single statement without any extras is returned as-is.
 func TestSplitStatements_SingleStatement(t *testing.T) {
 	input := `CREATE TABLE users (id UUID PRIMARY KEY);`
 

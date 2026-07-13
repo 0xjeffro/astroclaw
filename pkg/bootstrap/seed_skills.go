@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"context"
@@ -14,28 +14,29 @@ import (
 	"gocloud.dev/blob"
 )
 
-// seedDefaultSkills reads skill directories bundled with the Lambda,
-// uploads each file to the storage bucket under
-// skills/{author}/{name}/{version}/..., and writes a per-workspace
-// installation record to DSQL. Skips skills that already exist in the
-// database.
-func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *skills.Service, bucket *blob.Bucket) error {
-	// Find the default workspace (the admin's first workspace).
+// seedDefaultSkills scans skillsDir for @author/name/SKILL.md, uploads
+// the files to the bucket under skills/{author}/{name}/{version}/...,
+// and writes an install record per workspace. Skips skills that are
+// already installed in the workspace.
+//
+// Storage-first, DB-second: DB is the source of truth at runtime, so
+// a half-uploaded skill without a DB record is invisible and safe.
+// WriteAll is idempotent, so retrying overwrites cleanly.
+func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *skills.Service, bucket *blob.Bucket, skillsDir string) error {
 	admin, err := sysSvc.GetAdmin(ctx)
 	if err != nil {
-		return fmt.Errorf("get admin for agent seed: %w", err)
+		return fmt.Errorf("get admin for skill seed: %w", err)
 	}
 	workspaces, err := sysSvc.ListWorkspacesForUser(ctx, admin.ID)
 	if err != nil {
 		return fmt.Errorf("list admin workspaces: %w", err)
 	}
 	if len(workspaces) == 0 {
-		return fmt.Errorf("admin has no workspace to seed agent into")
+		return fmt.Errorf("admin has no workspace to seed skills into")
 	}
 	workspaceID := workspaces[0].ID
 
-	// Scan skills/ directory for @author/name directories containing SKILL.md.
-	authors, err := filepath.Glob("skills/@*")
+	authors, err := filepath.Glob(filepath.Join(skillsDir, "@*"))
 	if err != nil {
 		return fmt.Errorf("glob skill authors: %w", err)
 	}
@@ -57,15 +58,11 @@ func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *s
 				continue
 			}
 
-			// Only skip if the skill definitively exists for this workspace
-			// (err == nil and record returned). If err != nil it could be a
-			// DB connection issue, not "not found"; let the InstallSkill call below surface the real error.
 			if existing, err := skillsSvc.GetSkillFromWorkspace(ctx, workspaceID, author, skillName); err == nil && existing != nil {
 				log.Printf("skill %s/%s already installed in workspace, skipping", author, skillName)
 				continue
 			}
 
-			// Read SKILL.md to extract description from frontmatter.
 			content, err := os.ReadFile(skillMD)
 			if err != nil {
 				log.Printf("read %s: %v", skillMD, err)
@@ -73,23 +70,11 @@ func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *s
 			}
 			description, whenToUse, version := parseFrontmatter(string(content))
 
-			// Upload storage first, then write DB. DB is the source of
-			// truth for the agent at runtime: if a skill has a DB record,
-			// the agent expects its files to fully exist in the bucket.
-			// This ordering ensures:
-			//
-			// Scenario A: storage upload succeeds, DB write fails
-			// Skill is invisible to agent. Next deploy retries and
-			// succeeds (WriteAll is idempotent).
-			//
-			// Scenario B: storage partially uploads, then fails
-			// Same as A. Skill invisible, next deploy overwrites all files.
 			if err := uploadSkillFiles(ctx, bucket, author, skillName, version, skillDir); err != nil {
 				log.Printf("upload %s/%s to storage: %v", author, skillName, err)
 				continue
 			}
 
-			// Write metadata to DSQL.
 			_, err = skillsSvc.InstallSkill(ctx, workspaceID, author, skillName, version, description, whenToUse, nil)
 			if err != nil {
 				log.Printf("install skill %s/%s in DB: %v", author, skillName, err)
@@ -99,12 +84,11 @@ func seedDefaultSkills(ctx context.Context, sysSvc *system.Service, skillsSvc *s
 			log.Printf("seeded skill: %s/%s@%s", author, skillName, version)
 		}
 	}
-
 	return nil
 }
 
-// uploadSkillFiles uploads all files in a skill directory to the bucket,
-// preserving the directory structure under skills/{author}/{name}/{version}/.
+// uploadSkillFiles walks dir and uploads every regular file under
+// skills/{author}/{name}/{version}/<relpath>.
 func uploadSkillFiles(ctx context.Context, bucket *blob.Bucket, author, name, version, dir string) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -113,7 +97,6 @@ func uploadSkillFiles(ctx context.Context, bucket *blob.Bucket, author, name, ve
 		if info.IsDir() {
 			return nil
 		}
-
 		relPath, err := filepath.Rel(dir, path)
 		if err != nil {
 			return err
@@ -124,21 +107,19 @@ func uploadSkillFiles(ctx context.Context, bucket *blob.Bucket, author, name, ve
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-
 		if err := bucket.WriteAll(ctx, key, data, nil); err != nil {
 			return fmt.Errorf("put %s: %w", key, err)
 		}
-
 		log.Printf("  uploaded: %s", key)
 		return nil
 	})
 }
 
 // parseFrontmatter extracts description, when_to_use, and version from
-// SKILL.md YAML frontmatter. Missing fields are returned as empty strings.
+// SKILL.md YAML frontmatter. Missing fields return empty strings.
 func parseFrontmatter(content string) (description, whenToUse, version string) {
-	// TODO: when Skill Store is implemented, valid frontmatter should
-	// be a hard requirement for pre-validating. Reject skills without it.
+	// TODO: when Skill Store lands, valid frontmatter should be a hard
+	// requirement. For now we silently accept missing fields.
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
 		log.Printf("warning: SKILL.md has no valid YAML frontmatter (missing --- delimiters)")
