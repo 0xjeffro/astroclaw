@@ -35,3 +35,4 @@ go.work.sum
 
 .claude/settings.local.json
 draft
+.astroclaw.env

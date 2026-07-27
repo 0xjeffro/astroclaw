@@ -36,7 +36,7 @@ func seedCredentials(ctx context.Context, pwSvc *passwords.Service, anthropicAPI
 }
 
 // seedJWTSecret ensures the HMAC secret used to sign session JWTs
-// exists. Generated on first run with crypto/rand, wrapped with the
+// exists. Generated on the first run with crypto/rand, wrapped with the
 // system data key, reused thereafter. Never appears in env or logs.
 func seedJWTSecret(ctx context.Context, pwSvc *passwords.Service) error {
 	if _, err := pwSvc.GetSystemCredential(ctx, passwords.SystemCredJWTSecret); err == nil {

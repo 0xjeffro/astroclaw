@@ -86,7 +86,7 @@ func Seed(ctx context.Context, cfg Config) error {
 
 	// Order matters:
 	//   - system data key must exist before any system credential is written
-	//   - passwords service must be injected into system.Service so
+	//   - password service must be injected into system.Service so
 	//     CreateUser and CreateWorkspace can provision per-entity data keys
 	if err := seedSystemDataKey(ctx, pwSvc); err != nil {
 		return err
